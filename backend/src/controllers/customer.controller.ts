@@ -778,7 +778,7 @@ export const createTripPlan = async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     if (!userId) return res.status(401).json({ message: 'Chưa đăng nhập' });
 
-    const { destination, startDate, endDate, budget } = req.body;
+    const { destination, startDate, endDate, budget, style } = req.body;
     if (!destination || !startDate || !endDate) {
       return res.status(400).json({ message: 'Thiếu thông tin chuyến đi' });
     }
@@ -871,6 +871,24 @@ export const listTripPlans = async (req: Request, res: Response) => {
   }
 };
 
+export const deleteTripPlan = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const { id } = req.params;
+    if (!userId) return res.status(401).json({ message: 'Chưa đăng nhập' });
+
+    await query(
+      'DELETE FROM trip_plans WHERE id_trip_plan = $1 AND id_user = $2',
+      [id, userId]
+    );
+
+    res.json({ success: true, message: 'Đã xóa kế hoạch thành công' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Lỗi khi xóa kế hoạch chuyến đi' });
+  }
+};
+
 export default {
   listServices,
   getService,
@@ -886,4 +904,5 @@ export default {
   getHomeData,
   createTripPlan,
   listTripPlans,
+  deleteTripPlan,
 };

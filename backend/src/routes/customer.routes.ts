@@ -27,5 +27,6 @@ router.post('/payments/momo', customerCtrl.initMomoPayment);
 
 router.post('/trip-plans', customerCtrl.createTripPlan);
 router.get('/trip-plans', customerCtrl.listTripPlans);
+router.delete('/trip-plans/:id', customerCtrl.deleteTripPlan);
 
 export default router;

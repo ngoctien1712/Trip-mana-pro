@@ -93,12 +93,12 @@ export const customerApi = {
       topTickets: data.topTickets?.map(mapBackendServiceToService) || [],
       topRatedServices: [],
       featuredVouchers: [],
-      popularDestinations: data.popularDestinations.map((d) => ({
+      popularDestinations: data.popularDestinations?.map((d) => ({
         id: d.id,
         name: d.name,
         image: d.image,
         serviceCount: d.serviceCount,
-      })),
+      })) || [],
     };
   },
 
@@ -192,6 +192,7 @@ export const customerApi = {
     startDate: string;
     endDate: string;
     budget?: number;
+    style?: string;
   }): Promise<any> {
     const res = await httpClient.post<{
       id_trip_plan: string;
@@ -205,10 +206,19 @@ export const customerApi = {
       startDate: input.startDate,
       endDate: input.endDate,
       budget: input.budget,
+      style: input.style,
     });
 
     // TripPlanner.tsx dùng trực tiếp các field này
     return res;
+  },
+
+  async listTripPlans(): Promise<any[]> {
+    return httpClient.get<any[]>('/customer/trip-plans');
+  },
+
+  async deleteTripPlan(id: string): Promise<void> {
+    return httpClient.delete(`/customer/trip-plans/${id}`);
   },
 
   // (Giữ cho tương thích nếu sau này cần DTO chuẩn hơn)
