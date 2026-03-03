@@ -30,7 +30,8 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Loader2, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { Plus, Loader2, ChevronDown, ChevronRight, ExternalLink, Mail, Globe } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 
 const ServiceList = ({ providerId }: { providerId: string }) => {
@@ -47,8 +48,8 @@ const ServiceList = ({ providerId }: { providerId: string }) => {
     <div className="flex flex-wrap gap-2 mt-2">
       {services.map((s: any) => (
         <Link
-          key={s.id}
-          to={`/owner/services/${s.id}`}
+          key={s.idItem}
+          to={`/owner/services/${s.idItem}`}
           className="flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs hover:bg-secondary/80 transition-colors"
         >
           {s.title} <ExternalLink className="h-3 w-3" />
@@ -65,8 +66,14 @@ export const MyProviders = () => {
   const [error, setError] = useState('');
   const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [fanpage, setFanpage] = useState('');
+  const [serviceType, setServiceType] = useState<'tour' | 'accommodation' | 'vehicle'>('tour');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [areaId, setAreaId] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [bankAccountName, setBankAccountName] = useState('');
 
   // Area Selection States
   const [countryId, setCountryId] = useState('');
@@ -130,10 +137,16 @@ export const MyProviders = () => {
       setName('');
       setError('');
       setPhone('');
+      setEmail('');
+      setFanpage('');
+      setServiceType('tour');
       setImageFile(null);
       setAreaId('');
       setCountryId('');
       setCityId('');
+      setBankName('');
+      setBankAccountNumber('');
+      setBankAccountName('');
     },
     onError: (err: any) => {
       setError(err.message || 'Tạo nhà cung cấp thất bại');
@@ -161,9 +174,9 @@ export const MyProviders = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Thông tin</TableHead>
-                <TableHead>SĐT</TableHead>
+                <TableHead>Loại dịch vụ</TableHead>
+                <TableHead>Liên hệ</TableHead>
                 <TableHead>Khu vực</TableHead>
-                <TableHead>Thành phố</TableHead>
                 <TableHead>Trạng thái</TableHead>
               </TableRow>
             </TableHeader>
@@ -200,11 +213,33 @@ export const MyProviders = () => {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{p.phone}</TableCell>
                   <TableCell>
-                    {p.areaName} ({p.countryName})
+                    <Badge variant="outline">
+                      {p.serviceType === 'tour' ? 'Tour du lịch' : p.serviceType === 'accommodation' ? 'Lưu trú' : 'Phương tiện'}
+                    </Badge>
                   </TableCell>
-                  <TableCell>{p.cityName}</TableCell>
+                  <TableCell>
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center gap-1"><span className="font-semibold w-8">SĐT:</span> {p.phone}</div>
+                      {p.email && <div className="flex items-center gap-1"><span className="font-semibold w-8">Mail:</span> {p.email}</div>}
+                      {p.fanpage && (
+                        <a href={p.fanpage} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1">
+                          <Globe className="h-3 w-3" /> Link liên hệ
+                        </a>
+                      )}
+                      {(p.bankName || p.bankAccountNumber) && (
+                        <div className="pt-2 border-t mt-2">
+                          <div className="font-bold text-[10px] text-muted-foreground uppercase">Tài khoản ngân hàng</div>
+                          <div className="text-[10px]">{p.bankName} - {p.bankAccountNumber}</div>
+                          <div className="text-[10px] font-medium">{p.bankAccountName}</div>
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div>{p.areaName}</div>
+                    <div className="text-xs text-muted-foreground">{p.cityName}, {p.countryName}</div>
+                  </TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${p.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                       }`}>
@@ -245,12 +280,68 @@ export const MyProviders = () => {
                 placeholder="Ví dụ: 0123456789"
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Email liên hệ</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div>
+                <Label>Fanpage / Website</Label>
+                <Input
+                  value={fanpage}
+                  onChange={(e) => setFanpage(e.target.value)}
+                  placeholder="https://facebook.com/..."
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Loại dịch vụ cung cấp</Label>
+              <Select value={serviceType} onValueChange={(v: any) => setServiceType(v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tour">Tour du lịch</SelectItem>
+                  <SelectItem value="accommodation">Chỗ ở (Khách sạn, Homestay...)</SelectItem>
+                  <SelectItem value="vehicle">Phương tiện đi lại</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label>Hình ảnh</Label>
               <Input
                 type="file"
                 accept="image/*"
                 onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tên ngân hàng</Label>
+                <Input
+                  placeholder="Ví dụ: MB Bank, Vietcombank"
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Số tài khoản</Label>
+                <Input
+                  placeholder="Nhập số tài khoản"
+                  value={bankAccountNumber}
+                  onChange={(e) => setBankAccountNumber(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Tên chủ tài khoản</Label>
+              <Input
+                placeholder="NHẬP TÊN KHÔNG DẤU"
+                value={bankAccountName}
+                onChange={(e) => setBankAccountName(e.target.value.toUpperCase())}
               />
             </div>
             <div>
@@ -289,16 +380,22 @@ export const MyProviders = () => {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Hủy</Button>
             <Button
               onClick={() => {
-                if (name && areaId && phone) {
+                if (name && areaId && phone && serviceType) {
                   const formData = new FormData();
                   formData.append('name', name);
                   formData.append('areaId', areaId);
                   formData.append('phone', phone);
+                  formData.append('email', email);
+                  formData.append('fanpage', fanpage);
+                  formData.append('serviceType', serviceType);
+                  formData.append('bankName', bankName);
+                  formData.append('bankAccountNumber', bankAccountNumber);
+                  formData.append('bankAccountName', bankAccountName);
                   if (imageFile) formData.append('image', imageFile);
                   createMut.mutate(formData);
                 }
               }}
-              disabled={!name || !areaId || !phone || createMut.isPending}
+              disabled={!name || !areaId || !phone || !serviceType || createMut.isPending}
             >
               {createMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Tạo

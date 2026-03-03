@@ -89,9 +89,17 @@ export const ServiceDetail = () => {
                 arrivalProvinceId: service.arrivalProvinceId || '',
                 arrivalDistrictId: service.arrivalDistrictId || '',
                 arrivalWardId: service.arrivalWardId || '',
+                departureDate: service.departureDate || '',
+                arrivalDate: service.arrivalDate || '',
                 attribute: service.attribute || {}
             });
-            setAttribute(service.attribute || {});
+            setAttribute({
+                ...service.attribute,
+                departureDate: service.departureDate || '',
+                arrivalDate: service.arrivalDate || '',
+                departureTime: service.departureTime || '',
+                arrivalTime: service.arrivalTime || '',
+            });
             setHasInitialized(true);
         }
     }, [service, hasInitialized]);
@@ -348,7 +356,11 @@ export const ServiceDetail = () => {
             title,
             price: (price === '' || price === null) ? null : Number(price),
             description,
-            attribute,
+            attribute: {
+                ...attribute,
+                departureDate: attribute.departureDate,
+                arrivalDate: attribute.arrivalDate,
+            },
             extraData: {
                 ...sanitizedExtraData,
                 phoneNumber: extraData.phoneNumber,
@@ -1184,6 +1196,14 @@ export const ServiceDetail = () => {
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
+                                                        <Label>Ngày khởi hành</Label>
+                                                        <Input
+                                                            type="date"
+                                                            value={attribute.departureDate || ''}
+                                                            onChange={(e) => setAttribute({ ...attribute, departureDate: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
                                                         <Label>Giờ khởi hành</Label>
                                                         <Input
                                                             type="time"
@@ -1238,6 +1258,14 @@ export const ServiceDetail = () => {
                                                             value={attribute.arrivalPoint || ''}
                                                             onChange={(e) => setAttribute({ ...attribute, arrivalPoint: e.target.value })}
                                                             placeholder="VD: Bến xe Đà Lạt"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>Ngày đến dự kiến</Label>
+                                                        <Input
+                                                            type="date"
+                                                            value={attribute.arrivalDate || ''}
+                                                            onChange={(e) => setAttribute({ ...attribute, arrivalDate: e.target.value })}
                                                         />
                                                     </div>
                                                     <div className="space-y-2">

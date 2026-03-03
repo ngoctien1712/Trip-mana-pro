@@ -47,7 +47,10 @@ export const listServices = async (req: Request, res: Response) => {
     // Base Future Filter
     conditions.push(`(
       (bi.item_type = 'tour' AND EXISTS (SELECT 1 FROM tours t WHERE t.id_item = bi.id_item AND (t.tour_type = 'daily' OR t.start_at >= $${idx})))
-      OR (bi.item_type = 'vehicle' AND EXISTS (SELECT 1 FROM vehicle_trips vt WHERE vt.id_vehicle = v.id_vehicle AND vt.departure_time >= $${idx}))
+      OR (bi.item_type = 'vehicle' AND (
+           EXISTS (SELECT 1 FROM vehicle_trips vt WHERE vt.id_vehicle = v.id_vehicle AND vt.departure_time >= $${idx})
+           OR (v.departure_date > $${idx}::date OR (v.departure_date = $${idx}::date AND v.departure_time >= $${idx}::time))
+         ))
       OR (bi.item_type = 'accommodation')
       OR (bi.item_type = 'ticket')
     )`);
@@ -55,17 +58,28 @@ export const listServices = async (req: Request, res: Response) => {
     idx++;
 
     if (date) {
-      // For tours, check if date is within range
-      conditions.push(`(
-        (bi.item_type = 'tour' AND EXISTS (SELECT 1 FROM tours t WHERE t.id_item = bi.id_item AND (t.tour_type = 'daily' OR (t.start_at <= $${idx} AND t.end_at >= $${idx}))))
-      )`);
+      if (type === 'vehicle' || !type) {
+        conditions.push(`(
+          EXISTS (SELECT 1 FROM vehicle_trips vt WHERE vt.id_vehicle = v.id_vehicle AND vt.departure_time::date = $${idx})
+          OR (v.departure_date = $${idx}::date)
+        )`);
+      } else {
+        // For tours, check if date is within range
+        conditions.push(`(
+          (bi.item_type = 'tour' AND EXISTS (SELECT 1 FROM tours t WHERE t.id_item = bi.id_item AND (t.tour_type = 'daily' OR (t.start_at <= $${idx} AND t.end_at >= $${idx}))))
+        )`);
+      }
       params.push(date);
       idx++;
     }
 
-    if (departureDate && type === 'vehicle') {
-      conditions.push(`EXISTS (SELECT 1 FROM vehicle_trips vt WHERE vt.id_vehicle = v.id_vehicle AND vt.departure_time::date = $${idx++})`);
+    if (departureDate && (type === 'vehicle' || !type)) {
+      conditions.push(`(
+        EXISTS (SELECT 1 FROM vehicle_trips vt WHERE vt.id_vehicle = v.id_vehicle AND vt.departure_time::date = $${idx})
+        OR (v.departure_date = $${idx}::date)
+      )`);
       params.push(departureDate);
+      idx++;
     }
 
     if (provinceId) {
@@ -331,7 +345,9 @@ export const getService = async (req: Request, res: Response) => {
     } else if (itemType === 'vehicle') {
       const { rows: vehRows } = await query(
         `SELECT 
-          id_vehicle, code_vehicle, max_guest, 
+          id_vehicle, code_vehicle, max_guest, departure_time::text as departure_time, departure_point, 
+          arrival_time::text as arrival_time, 
+          arrival_point, departure_date::text as departure_date, arrival_date::text as arrival_date,
           estimated_duration as "estimatedDuration", 
           attribute as vehicle_attribute 
          FROM vehicle WHERE id_item = $1`,

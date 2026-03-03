@@ -21,6 +21,12 @@ export interface OwnerProvider {
   cityName: string;
   countryName: string;
   phone?: string;
+  email?: string;
+  fanpage?: string;
+  serviceType?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountName?: string;
   image?: string;
   status: string;
 }

@@ -55,6 +55,13 @@ export const MyServices = () => {
     const [wardId, setWardId] = useState('');
     const [specificAddress, setSpecificAddress] = useState('');
     const [ticketKind, setTicketKind] = useState('');
+    const [departureDate, setDepartureDate] = useState('');
+    const [arrivalDate, setArrivalDate] = useState('');
+    const [departureTime, setDepartureTime] = useState('');
+    const [arrivalTime, setArrivalTime] = useState('');
+    const [departurePoint, setDeparturePoint] = useState('');
+    const [arrivalPoint, setArrivalPoint] = useState('');
+    const [error, setError] = useState('');
 
     const [provinces, setProvinces] = useState<any[]>([]);
     const [districts, setDistricts] = useState<any[]>([]);
@@ -101,6 +108,16 @@ export const MyServices = () => {
     });
     const providers = providersData?.data ?? [];
 
+    // Auto-set itemType when provider changes
+    useEffect(() => {
+        if (serviceProviderId) {
+            const provider = providers.find((p: any) => p.id === serviceProviderId);
+            if (provider && provider.serviceType) {
+                setItemType(provider.serviceType);
+            }
+        }
+    }, [serviceProviderId, providers]);
+
     const { data: servicesData, isLoading } = useQuery({
         queryKey: ['owner', 'all-services'],
         queryFn: () => ownerGeographyApi.listAllMyBookableItems(),
@@ -113,6 +130,7 @@ export const MyServices = () => {
             itemType: 'tour' | 'accommodation' | 'vehicle' | 'ticket';
             title: string;
             price?: number;
+            attribute?: any;
             extraData?: any;
         }) => ownerGeographyApi.createBookableItem(d),
         onSuccess: () => {
@@ -130,7 +148,17 @@ export const MyServices = () => {
             setWardId('');
             setSpecificAddress('');
             setTicketKind('');
+            setDepartureDate('');
+            setArrivalDate('');
+            setDepartureTime('');
+            setArrivalTime('');
+            setDeparturePoint('');
+            setArrivalPoint('');
+            setError('');
         },
+        onError: (err: any) => {
+            setError(err.message || 'Tạo dịch vụ thất bại');
+        }
     });
 
     const filteredServices = services.filter((s: any) => {
@@ -223,7 +251,7 @@ export const MyServices = () => {
                                     </TableRow>
                                 ) : (
                                     filteredServices.map((s: any) => (
-                                        <TableRow key={s.id}>
+                                        <TableRow key={s.idItem}>
                                             <TableCell className="font-medium">{s.title}</TableCell>
                                             <TableCell>{getTypeBadge(s.itemType)}</TableCell>
                                             <TableCell>{s.providerName}</TableCell>
@@ -231,7 +259,7 @@ export const MyServices = () => {
                                             <TableCell>{s.price ? s.price.toLocaleString() : 'Liên hệ'}</TableCell>
                                             <TableCell className="text-right">
                                                 <Button asChild variant="ghost" size="sm">
-                                                    <Link to={`/owner/services/${s.id}`}>
+                                                    <Link to={`/owner/services/${s.idItem}`}>
                                                         Chi tiết <ExternalLink className="ml-2 h-3 w-3" />
                                                     </Link>
                                                 </Button>
@@ -268,7 +296,7 @@ export const MyServices = () => {
                             </div>
                             <div className="space-y-2">
                                 <Label>Loại dịch vụ</Label>
-                                <Select value={itemType} onValueChange={(v) => setItemType(v as 'tour' | 'accommodation' | 'vehicle' | 'ticket')}>
+                                <Select value={itemType} onValueChange={(v) => setItemType(v as 'tour' | 'accommodation' | 'vehicle' | 'ticket')} disabled={!!serviceProviderId}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="tour">Tour du lịch</SelectItem>
@@ -276,6 +304,7 @@ export const MyServices = () => {
                                         <SelectItem value="vehicle">Phương tiện đi lại</SelectItem>
                                     </SelectContent>
                                 </Select>
+                                {serviceProviderId && <p className="text-[10px] text-muted-foreground italic">Loại dịch vụ được cố định theo nhà cung cấp</p>}
                             </div>
                         </div>
 
@@ -366,9 +395,42 @@ export const MyServices = () => {
                             )}
 
                             {itemType === 'vehicle' && (
-                                <p className="text-sm text-muted-foreground italic">Thiết lập chi tiết loại xe trong trang quản lý chi tiết sau khi tạo.</p>
+                                <div className="grid gap-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Ngày khởi hành</Label>
+                                            <Input type="date" value={departureDate} onChange={(e) => setDepartureDate(e.target.value)} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Giờ khởi hành</Label>
+                                            <Input type="time" value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Ngày đến</Label>
+                                            <Input type="date" value={arrivalDate} onChange={(e) => setArrivalDate(e.target.value)} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Giờ đến</Label>
+                                            <Input type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Điểm đón</Label>
+                                            <Input value={departurePoint} onChange={(e) => setDeparturePoint(e.target.value)} placeholder="Ví dụ: Bến xe Mỹ Đình" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Điểm đến</Label>
+                                            <Input value={arrivalPoint} onChange={(e) => setArrivalPoint(e.target.value)} placeholder="Ví dụ: Bến xe Bãi Cháy" />
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground italic">Giờ khởi hành phải cách hiện tại ít nhất 12 tiếng. Nếu cùng ngày, giờ đến phải sau giờ khởi hành.</p>
+                                </div>
                             )}
                         </div>
+                        {error && <p className="text-sm text-destructive font-medium">{error}</p>}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setServiceOpen(false)}>Hủy</Button>
@@ -377,6 +439,7 @@ export const MyServices = () => {
                             onClick={() => {
                                 if (serviceProviderId && serviceTitle) {
                                     let extraData = {};
+                                    let attributeData = {};
                                     if (itemType === 'tour') {
                                         extraData = { guideLanguage: tourGuideLang, startAt: tourStart, endAt: tourEnd };
                                     } else if (itemType === 'accommodation') {
@@ -389,6 +452,49 @@ export const MyServices = () => {
                                         };
                                     } else if (itemType === 'ticket') {
                                         extraData = { ticketKind };
+                                    } else if (itemType === 'vehicle') {
+                                        // Frontend validation
+                                        if (!departureDate || !departureTime || !arrivalDate || !arrivalTime) {
+                                            setError('Vui lòng điền đầy đủ ngày giờ');
+                                            return;
+                                        }
+
+                                        const now = new Date();
+                                        const depDate = new Date(departureDate);
+                                        const arrDate = new Date(arrivalDate);
+
+                                        if (depDate < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+                                            setError('Ngày khởi hành không được nhỏ hơn ngày hiện tại');
+                                            return;
+                                        }
+                                        if (arrDate < depDate) {
+                                            setError('Ngày đến phải lớn hơn hoặc bằng ngày khởi hành');
+                                            return;
+                                        }
+
+                                        const depDateTime = new Date(`${departureDate}T${departureTime}`);
+                                        const twelveHoursLater = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+                                        if (depDateTime < twelveHoursLater) {
+                                            setError('Giờ khởi hành phải cách hiện tại ít nhất 12 tiếng');
+                                            return;
+                                        }
+
+                                        if (departureDate === arrivalDate) {
+                                            if (arrivalTime <= departureTime) {
+                                                setError('Giờ đến phải lớn hơn giờ khởi hành');
+                                                return;
+                                            }
+                                        }
+
+                                        extraData = { phoneNumber: '', codeVehicle: '' }; // Placeholders
+                                        attributeData = {
+                                            departureDate,
+                                            arrivalDate,
+                                            departureTime,
+                                            arrivalTime,
+                                            departurePoint,
+                                            arrivalPoint
+                                        };
                                     }
 
                                     createServiceMut.mutate({
@@ -396,11 +502,12 @@ export const MyServices = () => {
                                         itemType,
                                         title: serviceTitle,
                                         price: servicePrice ? Number(servicePrice) : undefined,
+                                        attribute: attributeData,
                                         extraData
                                     });
                                 }
                             }}
-                            disabled={!serviceProviderId || !serviceTitle || createServiceMut.isPending}
+                            disabled={!serviceProviderId || !serviceTitle || (itemType === 'vehicle' && (!departureDate || !arrivalDate || !departureTime || !arrivalTime)) || createServiceMut.isPending}
                         >
                             {createServiceMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                             Tạo dịch vụ

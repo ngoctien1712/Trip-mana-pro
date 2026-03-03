@@ -82,7 +82,8 @@ export async function getMyProviders(req: Request, res: Response) {
   try {
     const userId = req.user!.userId;
     const { rows } = await pool.query(
-      `SELECT p.id_provider, p.name, p.id_area, p.id_user, p.phone, p.image, p.status,
+      `SELECT p.id_provider, p.name, p.id_area, p.id_user, p.phone, p.email, p.fanpage, p.service_type, p.image, p.status,
+              p.bank_name, p.bank_account_number, p.bank_account_name,
               a.name AS area_name, c.name AS city_name, co.name AS country_name
        FROM provider p
        LEFT JOIN area a ON a.id_area = p.id_area
@@ -101,6 +102,12 @@ export async function getMyProviders(req: Request, res: Response) {
         cityName: r.city_name,
         countryName: r.country_name,
         phone: r.phone,
+        email: r.email,
+        fanpage: r.fanpage,
+        serviceType: r.service_type,
+        bankName: r.bank_name,
+        bankAccountNumber: r.bank_account_number,
+        bankAccountName: r.bank_account_name,
         image: r.image,
         status: r.status,
       })),
@@ -185,10 +192,12 @@ export async function getServiceDetail(req: Request, res: Response) {
       details.rooms = rooms.map(r => toCamel(r as Record<string, unknown>));
     } else if (itemType === 'vehicle') {
       const { rows } = await pool.query(
-        `SELECT id_vehicle, id_item, code_vehicle, max_guest, departure_time, departure_point, arrival_time, 
+        `SELECT id_vehicle, id_item, code_vehicle, max_guest, 
+                departure_time::text, departure_point, arrival_time::text, 
                 arrival_point, estimated_duration, attribute, phone_number,
                 departure_province_id, departure_district_id, departure_ward_id,
-                arrival_province_id, arrival_district_id, arrival_ward_id
+                arrival_province_id, arrival_district_id, arrival_ward_id,
+                departure_date::text, arrival_date::text
          FROM vehicle WHERE id_item = $1`,
         [idItem]
       );
@@ -329,14 +338,42 @@ export async function updateServiceDetail(req: Request, res: Response) {
         [idItem, extraData.ticketKind]
       );
     } else if (itemType === 'vehicle' && extraData) {
+      const { departureDate, arrivalDate, departureTime, arrivalTime } = attribute || {};
+
+      // Validation
+      const now = new Date();
+      const depDate = new Date(departureDate);
+      const arrDate = new Date(arrivalDate);
+
+      if (depDate < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+        return res.status(400).json({ message: 'Ngày khởi hành không được nhỏ hơn ngày hiện tại' });
+      }
+      if (arrDate < depDate) {
+        return res.status(400).json({ message: 'Ngày đến phải lớn hơn hoặc bằng ngày khởi hành' });
+      }
+
+      // Check 12h gap for departure
+      const depDateTime = new Date(`${departureDate}T${departureTime}`);
+      const twelveHoursLater = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+      if (depDateTime < twelveHoursLater) {
+        return res.status(400).json({ message: 'Giờ khởi hành phải cách hiện tại ít nhất 12 tiếng' });
+      }
+
+      if (departureDate === arrivalDate) {
+        if (arrivalTime <= departureTime) {
+          return res.status(400).json({ message: 'Nếu đi và đến cùng ngày, giờ đến phải lớn hơn giờ khởi hành' });
+        }
+      }
+
       await client.query(
         `INSERT INTO vehicle (
           id_item, code_vehicle, max_guest, departure_time, departure_point, arrival_time, 
           arrival_point, estimated_duration, attribute, phone_number,
           departure_province_id, departure_district_id, departure_ward_id,
-          arrival_province_id, arrival_district_id, arrival_ward_id
+          arrival_province_id, arrival_district_id, arrival_ward_id,
+          departure_date, arrival_date
         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          ON CONFLICT (id_item) DO UPDATE 
          SET code_vehicle = EXCLUDED.code_vehicle, 
              max_guest = EXCLUDED.max_guest,
@@ -352,14 +389,16 @@ export async function updateServiceDetail(req: Request, res: Response) {
              departure_ward_id = EXCLUDED.departure_ward_id,
              arrival_province_id = EXCLUDED.arrival_province_id,
              arrival_district_id = EXCLUDED.arrival_district_id,
-             arrival_ward_id = EXCLUDED.arrival_ward_id`,
+             arrival_ward_id = EXCLUDED.arrival_ward_id,
+             departure_date = EXCLUDED.departure_date,
+             arrival_date = EXCLUDED.arrival_date`,
         [
           idItem,
           extraData.codeVehicle || '',
           Number(extraData.maxGuest) || 45,
-          attribute?.departureTime || null,
+          departureTime || null,
           attribute?.departurePoint || null,
-          attribute?.arrivalTime || null,
+          arrivalTime || null,
           attribute?.arrivalPoint || null,
           attribute?.estimatedDuration || null,
           attribute ? JSON.stringify(attribute) : null,
@@ -369,7 +408,9 @@ export async function updateServiceDetail(req: Request, res: Response) {
           extraData.departureWardId || null,
           extraData.arrivalProvinceId || null,
           extraData.arrivalDistrictId || null,
-          extraData.arrivalWardId || null
+          extraData.arrivalWardId || null,
+          departureDate || null,
+          arrivalDate || null
         ]
       );
     }
@@ -535,13 +576,14 @@ export async function deleteVehiclePosition(req: Request, res: Response) {
 export async function createProvider(req: Request, res: Response) {
   try {
     const userId = req.user!.userId;
-    const { name, areaId, phone } = req.body;
+    const { name, areaId, phone, email, fanpage, serviceType, bankName, bankAccountNumber, bankAccountName } = req.body;
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
     const { rows } = await pool.query(
-      `INSERT INTO provider (name, id_area, id_user, phone, image, status) VALUES ($1, $2, $3, $4, $5, 'pending')
-       RETURNING id_provider, name, id_area, id_user, phone, image, status`,
-      [name, areaId, userId, phone, imageUrl]
+      `INSERT INTO provider (name, id_area, id_user, phone, email, fanpage, service_type, image, status, bank_name, bank_account_number, bank_account_name) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11)
+       RETURNING id_provider, name, id_area, id_user, phone, email, fanpage, service_type, image, status, bank_name, bank_account_number, bank_account_name`,
+      [name, areaId, userId, phone, email, fanpage, serviceType, imageUrl, bankName, bankAccountNumber, bankAccountName]
     );
     res.status(201).json(toCamel(rows[0] as Record<string, unknown>));
   } catch (err) {
@@ -788,7 +830,7 @@ export async function createBookableItem(req: Request, res: Response) {
     const { providerId, areaId, itemType, title, attribute, price, extraData } = req.body;
 
     const providerCheck = await client.query(
-      "SELECT id_provider, id_area, status FROM provider WHERE id_provider = $1 AND id_user = $2",
+      "SELECT id_provider, id_area, status, service_type FROM provider WHERE id_provider = $1 AND id_user = $2",
       [providerId, userId]
     );
 
@@ -796,11 +838,13 @@ export async function createBookableItem(req: Request, res: Response) {
       return res.status(400).json({ message: "Nhà cung cấp không thuộc về bạn" });
     }
 
-    if (providerCheck.rows[0].status !== 'active') {
+    const provider = providerCheck.rows[0];
+    if (provider.status !== 'active') {
       return res.status(403).json({ message: "Nhà cung cấp chưa được duyệt. Bạn chưa thể tạo dịch vụ." });
     }
 
-    const areaIdToUse = areaId ?? providerCheck.rows[0].id_area;
+    const areaIdToUse = areaId ?? provider.id_area;
+    const finalItemType = provider.service_type || itemType; // Fallback to frontend if not set
 
     await client.query('BEGIN');
 
@@ -808,12 +852,13 @@ export async function createBookableItem(req: Request, res: Response) {
       `INSERT INTO bookable_items (id_provider, id_area, item_type, title, attribute, price)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id_item, id_provider, id_area, item_type, title, attribute, price`,
-      [providerId, areaIdToUse, itemType, title, attribute ? JSON.stringify(attribute) : null, price ?? null]
+      [providerId, areaIdToUse, finalItemType, title, attribute ? JSON.stringify(attribute) : null, price ?? null]
     );
 
     const itemId = itemRows[0].id_item;
+    const effectiveItemType = finalItemType;
 
-    if (itemType === 'tour') {
+    if (effectiveItemType === 'tour') {
       const startAt = extraData?.startAt && extraData.startAt !== '' ? extraData.startAt : null;
       const endAt = extraData?.endAt && extraData.endAt !== '' ? extraData.endAt : null;
 
@@ -822,7 +867,7 @@ export async function createBookableItem(req: Request, res: Response) {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [itemId, extraData?.guideLanguage, attribute ? JSON.stringify(attribute) : null, startAt, endAt, price]
       );
-    } else if (itemType === 'accommodation') {
+    } else if (effectiveItemType === 'accommodation') {
       await client.query(
         `INSERT INTO accommodations (
           id_item, address, hotel_type, star_rating, checkin_time, checkout_time, policies, attribute,
@@ -845,27 +890,55 @@ export async function createBookableItem(req: Request, res: Response) {
           extraData?.specificAddress || null
         ]
       );
-    } else if (itemType === 'ticket') {
+    } else if (effectiveItemType === 'ticket') {
       await client.query(
         `INSERT INTO tickets (id_item, ticket_kind) VALUES ($1, $2)`,
         [itemId, extraData?.ticketKind]
       );
-    } else if (itemType === 'vehicle') {
+    } else if (effectiveItemType === 'vehicle') {
+      const { departureDate, arrivalDate, departureTime, arrivalTime } = attribute || {};
+
+      // Validation
+      const now = new Date();
+      const depDate = new Date(departureDate);
+      const arrDate = new Date(arrivalDate);
+
+      if (depDate < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+        return res.status(400).json({ message: 'Ngày khởi hành không được nhỏ hơn ngày hiện tại' });
+      }
+      if (arrDate < depDate) {
+        return res.status(400).json({ message: 'Ngày đến phải lớn hơn hoặc bằng ngày khởi hành' });
+      }
+
+      // Check 12h gap for departure
+      const depDateTime = new Date(`${departureDate}T${departureTime}`);
+      const twelveHoursLater = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+      if (depDateTime < twelveHoursLater) {
+        return res.status(400).json({ message: 'Giờ khởi hành phải cách hiện tại ít nhất 12 tiếng' });
+      }
+
+      if (departureDate === arrivalDate) {
+        if (arrivalTime <= departureTime) {
+          return res.status(400).json({ message: 'Nếu đi và đến cùng ngày, giờ đến phải lớn hơn giờ khởi hành' });
+        }
+      }
+
       await client.query(
         `INSERT INTO vehicle (
           id_item, code_vehicle, max_guest, departure_time, departure_point, arrival_time, arrival_point, 
           estimated_duration, attribute, phone_number,
           departure_province_id, departure_district_id, departure_ward_id,
-          arrival_province_id, arrival_district_id, arrival_ward_id
+          arrival_province_id, arrival_district_id, arrival_ward_id,
+          departure_date, arrival_date
         ) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
         [
           itemId,
           extraData?.codeVehicle || '',
           Number(extraData?.maxGuest) || 45,
-          attribute?.departureTime || null,
+          departureTime || null,
           attribute?.departurePoint || null,
-          attribute?.arrivalTime || null,
+          arrivalTime || null,
           attribute?.arrivalPoint || null,
           attribute?.estimatedDuration || null,
           attribute ? JSON.stringify(attribute) : null,
@@ -875,7 +948,9 @@ export async function createBookableItem(req: Request, res: Response) {
           extraData?.departureWardId || null,
           extraData?.arrivalProvinceId || null,
           extraData?.arrivalDistrictId || null,
-          extraData?.arrivalWardId || null
+          extraData?.arrivalWardId || null,
+          departureDate || null,
+          arrivalDate || null
         ]
       );
     }
