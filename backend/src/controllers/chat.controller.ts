@@ -24,6 +24,8 @@ const getDb = () => {
     return admin.database();
 };
 
+const sanitizeUid = (uid: string) => uid.replace(/\./g, '_');
+
 export const initializeChat = async (req: Request, res: Response) => {
     const { customer_id, provider_id, item_id, item_name, customer_name } = req.body;
     const db = getDb();
@@ -40,9 +42,17 @@ export const initializeChat = async (req: Request, res: Response) => {
         const snap = await messagesRef.once('value');
         const hasAnyMessage = snap.exists();
 
+        const nowMs = admin.database.ServerValue.TIMESTAMP;
+        await conversationRef.update({
+            id_customer: customer_id,
+            id_provider: provider_id,
+            updated_at: nowMs,
+            item_name: item_name,
+            customer_name: customer_name,
+        });
+
         if (!hasAnyMessage) {
             const welcomeMsg = `👋 Xin chào! ${providerName} rất vui được đón tiếp quý khách.\n\nCảm ơn bạn đã quan tâm đến dịch vụ của chúng tôi. Chúng tôi có thể hỗ trợ gì cho hành trình sắp tới của bạn không?`;
-            const nowMs = admin.database.ServerValue.TIMESTAMP;
 
             await messagesRef.push({
                 sender_id: provider_id,
@@ -54,12 +64,13 @@ export const initializeChat = async (req: Request, res: Response) => {
 
             await conversationRef.update({
                 last_message: welcomeMsg,
-                updated_at: nowMs,
-                item_name: item_name,
-                customer_name: customer_name,
-                last_sender_id: provider_id
+                last_sender_id: provider_id,
             });
         }
+
+        const roomTs = admin.database.ServerValue.TIMESTAMP;
+        await db.ref(`user_chats/${sanitizeUid(customer_id)}/${conversationId}`).set(roomTs);
+        await db.ref(`user_chats/${sanitizeUid(provider_id)}/${conversationId}`).set(roomTs);
 
         return res.json({ conversation_id: conversationId, is_new: !hasAnyMessage });
     } catch (error) {
@@ -97,11 +108,14 @@ export const trackChatActivity = async (req: Request, res: Response) => {
             updated_at: admin.database.ServerValue.TIMESTAMP,
             last_sender_id: sender_id,
             item_name,
-            customer_name
+            customer_name,
+            id_customer: customer_id,
+            id_provider: provider_id
         });
 
-        await db.ref(`user_chats/${customer_id}/${conversation_id}`).set(true);
-        await db.ref(`user_chats/${provider_id}/${conversation_id}`).set(true);
+        const roomTs = admin.database.ServerValue.TIMESTAMP;
+        await db.ref(`user_chats/${sanitizeUid(customer_id)}/${conversation_id}`).set(roomTs);
+        await db.ref(`user_chats/${sanitizeUid(provider_id)}/${conversation_id}`).set(roomTs);
 
         return res.json({ success: true });
     } catch (error) {

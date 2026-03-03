@@ -21,35 +21,58 @@ export default function Messages() {
 
     const chatsMapRef = useRef<Record<string, any>>({});
     const listenersRef = useRef<Record<string, () => void>>({});
-    const selectedChatRef = useRef<any>(null); 
+    const selectedChatRef = useRef<any>(null);
+    const currentUserRef = useRef<any>(null); // State persistence for listeners
+
+    const sanitizeUid = (uid: string) => (uid ? uid.replace(/\./g, '_') : '');
 
     useEffect(() => {
         selectedChatRef.current = selectedChat;
     }, [selectedChat]);
 
     useEffect(() => {
+        currentUserRef.current = currentUser;
+    }, [currentUser]);
+
+    useEffect(() => {
         let isMounted = true;
 
         const attachRoomListener = (roomId: string) => {
-            if (listenersRef.current[roomId]) return;
+            if (!roomId || listenersRef.current[roomId]) return;
+
+            if (!chatsMapRef.current[roomId]) {
+                chatsMapRef.current[roomId] = {
+                    id_room: roomId,
+                    last_message: '...',
+                    customer_name: 'Khách hàng mới',
+                    updated_at: Date.now()
+                };
+                setChats(Object.values(chatsMapRef.current).sort((a, b) => {
+                    const getT = (v: any) => (typeof v === 'number' ? v : new Date(v).getTime() || 0);
+                    return getT(b.updated_at) - getT(a.updated_at);
+                }));
+            }
 
             const metaRef = ref(database, `chats/${roomId}`);
             const unsubscribe = onValue(metaRef, (metaSnap) => {
-                if (!metaSnap.exists() || !isMounted) return;
+                if (!isMounted) return;
 
-                const meta = metaSnap.val();
+                const meta = metaSnap.val() || {};
+                const currentData = chatsMapRef.current[roomId] || {};
+
                 chatsMapRef.current[roomId] = {
-                    ...chatsMapRef.current[roomId],
-                    id_room: roomId,
-                    ...meta
+                    ...currentData,
+                    ...meta,
+                    id_room: roomId
                 };
 
-                if (selectedChatRef.current?.id_room === roomId) {
-                    const [custId, provId] = roomId.split('_');
-                    const targetId = (currentUser?.role === 'customer') ? custId : provId;
+                // Tự động đánh dấu đã đọc nếu đang xem
+                if (selectedChatRef.current?.id_room === roomId && metaSnap.exists()) {
+                    const role = currentUserRef.current?.role;
+                    const targetId = (role === 'customer') ? (meta.id_customer || roomId.split('_')[0]) : (meta.id_provider || roomId.split('_')[1]);
                     const unreadCount = meta.unread?.[targetId] || 0;
 
-                    if (unreadCount > 0) {
+                    if (unreadCount > 0 && targetId) {
                         chatApi.markRead(roomId, targetId);
                         if (chatsMapRef.current[roomId].unread) {
                             chatsMapRef.current[roomId].unread[targetId] = 0;
@@ -59,7 +82,12 @@ export default function Messages() {
 
                 const allChats = Object.values(chatsMapRef.current);
                 allChats.sort((a, b) => {
-                    const getTs = (v: any) => (typeof v === 'number' ? v : new Date(v).getTime() || 0);
+                    const getTs = (v: any) => {
+                        if (!v) return Date.now();
+                        if (typeof v === 'number') return v;
+                        const t = new Date(v).getTime();
+                        return isNaN(t) ? Date.now() : t;
+                    };
                     return getTs(b.updated_at) - getTs(a.updated_at);
                 });
 
@@ -76,41 +104,56 @@ export default function Messages() {
                 const user = await userApi.getProfile();
                 if (!isMounted) return;
                 setCurrentUser(user);
+                currentUserRef.current = user;
+
                 await signInAnonymously(auth);
 
+                // 1. Initial Load from SQL (Historical chats)
                 const historical = await chatApi.listMyChats();
                 if (isMounted) {
                     historical.forEach(c => {
-                        chatsMapRef.current[c.id_room] = c;
+                        chatsMapRef.current[c.id_room] = { ...c };
                         attachRoomListener(c.id_room);
                     });
-                    setChats([...historical]);
+                    setChats(historical.length > 0 ? [...historical] : []);
                 }
 
-                let targetId = user.id;
+                // 2. Setup Realtime Listener for the User/Provider's Chat Index
+                let chatIdentityId = user.id;
                 if (user.role === 'owner') {
                     const providerInfo = await chatApi.getProviderInfo();
                     if (providerInfo?.id_provider) {
-                        targetId = providerInfo.id_provider;
+                        chatIdentityId = providerInfo.id_provider;
+                        const augmentedUser = { ...user, id: providerInfo.id_provider };
+                        setCurrentUser(augmentedUser);
+                        currentUserRef.current = augmentedUser;
                     }
                 }
 
-                const userChatsRef = ref(database, `user_chats/${targetId}`);
+                const sanitizedTargetId = sanitizeUid(String(chatIdentityId));
+                const userChatsRef = ref(database, `user_chats/${sanitizedTargetId}`);
+
                 onValue(userChatsRef, (snapshot) => {
+                    if (!isMounted) return;
                     if (!snapshot.exists()) {
-                        if (isMounted && Object.keys(chatsMapRef.current).length === 0) {
-                            setLoading(false);
-                        }
+                        setLoading(false);
                         return;
                     }
                     const roomIds = Object.keys(snapshot.val());
                     roomIds.forEach(roomId => attachRoomListener(roomId));
                 });
 
-                if (historical.length === 0) setLoading(false);
+                if (historical.length > 0) setLoading(false);
+                else {
+                    setTimeout(() => {
+                        if (isMounted && Object.keys(chatsMapRef.current).length === 0) {
+                            setLoading(false);
+                        }
+                    }, 1500);
+                }
 
             } catch (err) {
-                console.error(err);
+                console.error("Chat Fetch/Listen Error:", err);
                 if (isMounted) setLoading(false);
             }
         };
@@ -164,66 +207,66 @@ export default function Messages() {
                                 <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Không có hội thoại</p>
                             </div>
                         ) : (
-                            filteredChats.map((chat) => {
-                                const [custId, provId] = chat.id_room.split('_');
-                                const targetIdForUnread = currentUser.role === 'customer' ? custId : provId;
-                                const unreadCount = chat.unread?.[targetIdForUnread] || 0;
-
-                                return (
-                                    <div key={chat.id_room} className="relative group">
-                                        <Card
-                                            onClick={async () => {
-                                                setSelectedChat(chat);
-                                                if (unreadCount > 0) {
-                                                    await chatApi.markRead(chat.id_room, targetIdForUnread);
-                                                }
-                                            }}
-                                            className={`p-5 rounded-[28px] cursor-pointer transition-all duration-300 border-2 ${selectedChat?.id_room === chat.id_room ? 'border-blue-600 bg-blue-600 text-white shadow-2xl shadow-blue-200' : 'border-transparent bg-white hover:bg-gray-50 shadow-sm'}`}
-                                        >
-                                            <div className="flex items-start gap-4">
-                                                <div className={`relative w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${selectedChat?.id_room === chat.id_room ? 'bg-white/20' : 'bg-blue-50'}`}>
-                                                    <User size={28} className={selectedChat?.id_room === chat.id_room ? 'text-white' : 'text-blue-500'} />
-                                                    {unreadCount > 0 && selectedChat?.id_room !== chat.id_room && (
+                            filteredChats.map((chat) => (
+                                <div key={chat.id_room} className="relative group">
+                                    <Card
+                                        onClick={async () => {
+                                            setSelectedChat(chat);
+                                            const targetIdForUnread = (currentUser.role === 'customer') ? chat.id_customer : chat.id_provider;
+                                            const unreadCount = chat.unread?.[targetIdForUnread] || 0;
+                                            if (unreadCount > 0 && targetIdForUnread) {
+                                                await chatApi.markRead(chat.id_room, targetIdForUnread);
+                                            }
+                                        }}
+                                        className={`p-5 rounded-[28px] cursor-pointer transition-all duration-300 border-2 ${selectedChat?.id_room === chat.id_room ? 'border-blue-600 bg-blue-600 text-white shadow-2xl shadow-blue-200' : 'border-transparent bg-white hover:bg-gray-50 shadow-sm'}`}
+                                    >
+                                        <div className="flex items-start gap-4">
+                                            <div className={`relative w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${selectedChat?.id_room === chat.id_room ? 'bg-white/20' : 'bg-blue-50'}`}>
+                                                <User size={28} className={selectedChat?.id_room === chat.id_room ? 'text-white' : 'text-blue-500'} />
+                                                {(() => {
+                                                    const targetId = (currentUser.role === 'customer') ? chat.id_customer : chat.id_provider;
+                                                    const count = chat.unread?.[targetId] || 0;
+                                                    return count > 0 && selectedChat?.id_room !== chat.id_room && (
                                                         <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce">
-                                                            {unreadCount}
+                                                            {count}
                                                         </span>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <h3 className={`font-black truncate text-sm tracking-tight ${selectedChat?.id_room === chat.id_room ? 'text-white' : 'text-gray-900'}`}>{chat.customer_name}</h3>
-                                                        <span className={`text-[10px] font-bold shrink-0 ${selectedChat?.id_room === chat.id_room ? 'text-white/80' : 'text-gray-400'}`}>
-                                                            {chat.updated_at ? format(new Date(typeof chat.updated_at === 'number' ? chat.updated_at : chat.updated_at), 'HH:mm', { locale: vi }) : '--:--'}
-                                                        </span>
-                                                    </div>
-                                                    <p className={`text-[11px] font-bold truncate mb-2 ${selectedChat?.id_room === chat.id_room ? 'text-white/90' : 'text-blue-600'}`}>#{chat.item_name}</p>
-                                                    <p className={`text-xs truncate ${selectedChat?.id_room === chat.id_room ? 'text-white/70' : 'text-gray-500 font-medium'}`}>
-                                                        {chat.last_message || '...'}
-                                                    </p>
-                                                </div>
+                                                    );
+                                                })()}
                                             </div>
-                                        </Card>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <h3 className={`font-black truncate text-sm tracking-tight ${selectedChat?.id_room === chat.id_room ? 'text-white' : 'text-gray-900'}`}>{chat.customer_name}</h3>
+                                                    <span className={`text-[10px] font-bold shrink-0 ${selectedChat?.id_room === chat.id_room ? 'text-white/80' : 'text-gray-400'}`}>
+                                                        {chat.updated_at ? format(new Date(typeof chat.updated_at === 'number' ? chat.updated_at : chat.updated_at), 'HH:mm', { locale: vi }) : '--:--'}
+                                                    </span>
+                                                </div>
+                                                <p className={`text-[11px] font-bold truncate mb-2 ${selectedChat?.id_room === chat.id_room ? 'text-white/90' : 'text-blue-600'}`}>#{chat.item_name}</p>
+                                                <p className={`text-xs truncate ${selectedChat?.id_room === chat.id_room ? 'text-white/70' : 'text-gray-500 font-medium'}`}>
+                                                    {chat.last_message || '...'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </Card>
 
-                                        <button
-                                            onClick={async (e) => {
-                                                e.stopPropagation();
-                                                if (confirm('Bạn có chắc chắn muốn xóa vĩnh viễn cuộc hội thoại này?')) {
-                                                    try {
-                                                        await chatApi.deleteChat(chat.id_room);
-                                                        setChats(prev => prev.filter(c => c.id_room !== chat.id_room));
-                                                        if (selectedChat?.id_room === chat.id_room) setSelectedChat(null);
-                                                    } catch (err) {
-                                                        alert('Lỗi xóa tin nhắn');
-                                                    }
+                                    <button
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            if (confirm('Bạn có chắc chắn muốn xóa vĩnh viễn cuộc hội thoại này?')) {
+                                                try {
+                                                    await chatApi.deleteChat(chat.id_room);
+                                                    setChats(prev => prev.filter(c => c.id_room !== chat.id_room));
+                                                    if (selectedChat?.id_room === chat.id_room) setSelectedChat(null);
+                                                } catch (err) {
+                                                    alert('Lỗi xóa tin nhắn');
                                                 }
-                                            }}
-                                            className={`absolute -right-2 -top-2 w-8 h-8 rounded-full bg-white shadow-lg border border-red-50 text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white z-10`}
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
-                                );
-                            })
+                                            }
+                                        }}
+                                        className={`absolute -right-2 -top-2 w-8 h-8 rounded-full bg-white shadow-lg border border-red-50 text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white z-10`}
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                            ))
                         )}
                     </div>
                 </div>

@@ -8,6 +8,7 @@ router.post('/initialize', auth, initializeChat);
 router.get('/my-chats', auth, listMyChats);
 router.post('/track-activity', auth, trackChatActivity);
 router.post('/mark-read', auth, markAsRead);
+router.get('/provider-info', auth, getProviderId);
 router.delete('/:conversation_id', auth, deleteChat);
 
 export default router;
