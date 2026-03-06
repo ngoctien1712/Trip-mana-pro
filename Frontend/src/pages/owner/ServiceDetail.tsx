@@ -104,6 +104,16 @@ export const ServiceDetail = () => {
         }
     }, [service, hasInitialized]);
 
+    // Helper to format date for datetime-local input (YYYY-MM-DDTHH:mm)
+    const toDateTimeLocal = (dateStr: string | null) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return '';
+        const offset = date.getTimezoneOffset() * 60000;
+        const localISOTime = new Date(date.getTime() - offset).toISOString().slice(0, 16);
+        return localISOTime;
+    };
+
     // Fetch Provinces (Cities in this system)
     useEffect(() => {
         geographyApi.listCountries().then(res => {
@@ -203,7 +213,7 @@ export const ServiceDetail = () => {
     const [roomDescription, setRoomDescription] = useState('');
     const [roomMedia, setRoomMedia] = useState<any[]>([]);
     const [roomImageInput, setRoomImageInput] = useState('');
-    const [roomImageFiles, setRoomImageFiles] = useState<FileList | null>(null);
+    const [pendingRoomImages, setPendingRoomImages] = useState<{ id: string, file: File, preview: string }[]>([]);
 
     // Mutations
     const updateMut = useMutation({
@@ -261,6 +271,14 @@ export const ServiceDetail = () => {
             toast({ title: 'Lỗi', description: err.response?.data?.message || 'Không thể xóa hình ảnh', variant: 'destructive' });
         }
     });
+
+    const getImageUrl = (url: string) => {
+        if (!url) return '';
+        if (url.startsWith('http')) return url;
+        if (url.startsWith('blob:')) return url;
+        const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+        return `http://localhost:3000${cleanUrl}`;
+    };
 
     const addPosMut = useMutation({
         mutationFn: (d: { codePosition: string; price: number }) => ownerGeographyApi.addVehiclePosition(idItem!, d),
@@ -363,15 +381,32 @@ export const ServiceDetail = () => {
         mutationFn: ({ id, data }: { id: string; data: FormData }) => ownerGeographyApi.uploadRoomMedia(id, data),
         onSuccess: (res: any) => {
             toast({ title: 'Thành công', description: 'Đã tải lên ảnh phòng' });
-            // res.media is the updated array from backend
-            setRoomMedia(res.data?.media || res.media || []);
-            setRoomImageFiles(null);
+            // Handle different possible response structures
+            const updatedMedia = res.data?.media || res.media || [];
+            // Ensure each item has a url correctly mapped if needed
+            setRoomMedia(updatedMedia.map((m: any) => typeof m === 'string' ? { url: m } : m));
+
+            // Clean up previews to avoid memory leaks
+            pendingRoomImages.forEach(img => URL.revokeObjectURL(img.preview));
+            setPendingRoomImages([]);
             queryClient.invalidateQueries({ queryKey: ['owner', 'service-detail', idItem] });
         },
         onError: (err: any) => {
             toast({ title: 'Lỗi', description: err.response?.data?.message || 'Không thể tải lên ảnh phòng', variant: 'destructive' });
         }
     });
+
+
+    const handleMediaDelete = (media: any, index: number) => {
+        if (media.id) {
+            if (confirm('Bạn có muốn xóa vĩnh viễn ảnh này khỏi hệ thống?')) {
+                deleteMediaMut.mutate(media.id);
+                setRoomMedia(roomMedia.filter((_, i) => i !== index));
+            }
+        } else {
+            setRoomMedia(roomMedia.filter((_, i) => i !== index));
+        }
+    };
 
     const handleSave = () => {
         const sanitizedExtraData = { ...extraData };
@@ -390,8 +425,8 @@ export const ServiceDetail = () => {
         // Fix: Ensure combined timestamp for tours if needed, 
         // using ISO strings for startAt/endAt helps backend parse correctly
         // Fix: Use datetime-local string directly to avoid UTC shift
-        const payloadStart = sanitizedExtraData.startAt || null;
-        const payloadEnd = sanitizedExtraData.endAt || null;
+        const payloadStart = sanitizedExtraData.startAt ? new Date(sanitizedExtraData.startAt).toISOString() : null;
+        const payloadEnd = sanitizedExtraData.endAt ? new Date(sanitizedExtraData.endAt).toISOString() : null;
 
         updateMut.mutate({
             title,
@@ -592,11 +627,11 @@ export const ServiceDetail = () => {
                                         </div>
                                         <div className="space-y-2">
                                             <Label>Ngày khởi hành</Label>
-                                            <Input type="datetime-local" value={extraData.startAt ? new Date(extraData.startAt).toISOString().slice(0, 16) : ''} onChange={(e) => setExtraData({ ...extraData, startAt: e.target.value })} />
+                                            <Input type="datetime-local" value={toDateTimeLocal(extraData.startAt)} onChange={(e) => setExtraData({ ...extraData, startAt: e.target.value })} />
                                         </div>
                                         <div className="space-y-2">
                                             <Label>Ngày kết thúc</Label>
-                                            <Input type="datetime-local" value={extraData.endAt ? new Date(extraData.endAt).toISOString().slice(0, 16) : ''} onChange={(e) => setExtraData({ ...extraData, endAt: e.target.value })} />
+                                            <Input type="datetime-local" value={toDateTimeLocal(extraData.endAt)} onChange={(e) => setExtraData({ ...extraData, endAt: e.target.value })} />
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -985,6 +1020,7 @@ export const ServiceDetail = () => {
                                                     setRoomFacilities([]);
                                                     setRoomDescription('');
                                                     setRoomMedia([]);
+                                                    setPendingRoomImages([]);
                                                 }
                                             }}>
                                                 <DialogTrigger asChild>
@@ -992,7 +1028,7 @@ export const ServiceDetail = () => {
                                                         <Plus className="h-4 w-4 mr-2" /> Thêm loại phòng
                                                     </Button>
                                                 </DialogTrigger>
-                                                <DialogContent className="max-w-2xl">
+                                                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                                                     <DialogHeader>
                                                         <DialogTitle>{editingRoomId ? 'Chỉnh sửa hạng phòng' : 'Thêm phòng mới'}</DialogTitle>
                                                     </DialogHeader>
@@ -1033,9 +1069,9 @@ export const ServiceDetail = () => {
                                                         </div>
 
                                                         <div className="space-y-4">
-                                                            <div className="flex items-center justify-between">
-                                                                <Label>Hình ảnh phòng</Label>
-                                                                <div className="flex gap-2">
+                                                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-2">
+                                                                <Label className="flex items-center gap-1"><ImageIcon className="h-4 w-4 text-primary" /> Thư viện ảnh phòng</Label>
+                                                                <div className="flex items-center gap-2">
                                                                     <input
                                                                         type="file"
                                                                         id="room-upload"
@@ -1043,8 +1079,16 @@ export const ServiceDetail = () => {
                                                                         multiple
                                                                         accept="image/*"
                                                                         onChange={(e) => {
-                                                                            if (e.target.files && e.target.files.length > 0) {
-                                                                                setRoomImageFiles(e.target.files);
+                                                                            if (e.target.files) {
+                                                                                const files = Array.from(e.target.files);
+                                                                                const newPending = files.map(file => ({
+                                                                                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                                                                    file,
+                                                                                    preview: URL.createObjectURL(file)
+                                                                                }));
+                                                                                setPendingRoomImages(prev => [...prev, ...newPending]);
+                                                                                // Reset input value to allow selecting same files again if needed
+                                                                                e.target.value = '';
                                                                             }
                                                                         }}
                                                                     />
@@ -1052,48 +1096,73 @@ export const ServiceDetail = () => {
                                                                         type="button"
                                                                         variant="outline"
                                                                         size="sm"
+                                                                        className="h-8 text-xs bg-primary/5 hover:bg-primary/10 border-primary/20"
                                                                         onClick={() => document.getElementById('room-upload')?.click()}
                                                                         disabled={uploadRoomMediaMut.isPending}
                                                                     >
-                                                                        {uploadRoomMediaMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ImageIcon className="h-3 w-3 mr-1" />}
-                                                                        Chọn từ máy
+                                                                        {uploadRoomMediaMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <PlusCircle className="h-3 w-3 mr-1" />}
+                                                                        Chọn ảnh mới
                                                                     </Button>
-                                                                    {roomImageFiles && roomImageFiles.length > 0 && (
-                                                                        <div className="flex gap-1">
-                                                                            <Button
-                                                                                size="sm"
-                                                                                className="gradient-sunset border-none"
-                                                                                onClick={() => {
-                                                                                    if (editingRoomId) {
-                                                                                        const fd = new FormData();
-                                                                                        for (let i = 0; i < roomImageFiles.length; i++) {
-                                                                                            fd.append('images', roomImageFiles[i]);
-                                                                                        }
-                                                                                        uploadRoomMediaMut.mutate({ id: editingRoomId, data: fd });
-                                                                                    } else {
-                                                                                        toast({ title: 'Lưu ý', description: 'Hãy tạo loại phòng trước khi tải ảnh lên từ máy.' });
-                                                                                    }
-                                                                                }}
-                                                                            >
-                                                                                Tải lên ({roomImageFiles.length})
-                                                                            </Button>
-                                                                            <Button size="sm" variant="ghost" onClick={() => setRoomImageFiles(null)} className="h-8 w-8 p-0 text-red-500">
-                                                                                <X className="h-4 w-4" />
-                                                                            </Button>
-                                                                        </div>
+                                                                    {pendingRoomImages.length > 0 && (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            className="h-8 text-xs gradient-sunset border-none"
+                                                                            onClick={() => {
+                                                                                if (editingRoomId) {
+                                                                                    const fd = new FormData();
+                                                                                    pendingRoomImages.forEach(item => {
+                                                                                        fd.append('images', item.file);
+                                                                                    });
+                                                                                    uploadRoomMediaMut.mutate({ id: editingRoomId, data: fd });
+                                                                                } else {
+                                                                                    toast({ title: 'Lưu ý', description: 'Hãy tạo loại phòng trước khi tải ảnh lên máy chủ.' });
+                                                                                }
+                                                                            }}
+                                                                            disabled={uploadRoomMediaMut.isPending}
+                                                                        >
+                                                                            <Save className="h-3 w-3 mr-1" /> Tải lên ({pendingRoomImages.length})
+                                                                        </Button>
                                                                     )}
                                                                 </div>
                                                             </div>
+
+                                                            {/* Pending Images List */}
+                                                            {pendingRoomImages.length > 0 && (
+                                                                <div className="bg-orange-50/30 p-2 rounded-lg border border-orange-100 mb-2">
+                                                                    <p className="text-[10px] uppercase font-bold text-orange-600 mb-2 px-1">Ảnh chờ tải lên ({pendingRoomImages.length})</p>
+                                                                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                                                                        {pendingRoomImages.map((item) => (
+                                                                            <div key={item.id} className="relative h-16 w-16 shrink-0 rounded-md overflow-hidden border-2 border-orange-200">
+                                                                                <img src={item.preview} className="w-full h-full object-cover" />
+                                                                                <button
+                                                                                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 shadow-sm"
+                                                                                    onClick={() => {
+                                                                                        setPendingRoomImages(prev => {
+                                                                                            const next = prev.filter(p => p.id !== item.id);
+                                                                                            URL.revokeObjectURL(item.preview);
+                                                                                            return next;
+                                                                                        });
+                                                                                    }}
+                                                                                >
+                                                                                    <X className="h-3 w-3" />
+                                                                                </button>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
 
                                                             <div className="flex gap-2">
                                                                 <Input
                                                                     placeholder="Hoặc dán URL ảnh trực tiếp..."
                                                                     value={roomImageInput}
+                                                                    className="h-9"
                                                                     onChange={(e) => setRoomImageInput(e.target.value)}
                                                                 />
                                                                 <Button
                                                                     type="button"
-                                                                    variant="outline"
+                                                                    variant="secondary"
+                                                                    className="h-9 whitespace-nowrap"
                                                                     onClick={() => {
                                                                         if (roomImageInput) {
                                                                             setRoomMedia([...roomMedia, { url: roomImageInput, type: 'image' }]);
@@ -1104,18 +1173,33 @@ export const ServiceDetail = () => {
                                                                     Thêm URL
                                                                 </Button>
                                                             </div>
-                                                            <div className="grid grid-cols-4 gap-2">
-                                                                {roomMedia.map((m, idx) => (
-                                                                    <div key={idx} className="relative aspect-square rounded-md overflow-hidden border">
-                                                                        <img src={m.url} className="w-full h-full object-cover" />
-                                                                        <button
-                                                                            className="absolute top-0 right-0 bg-red-500 text-white p-0.5"
-                                                                            onClick={() => setRoomMedia(roomMedia.filter((_, i) => i !== idx))}
-                                                                        >
-                                                                            <X className="h-3 w-3" />
-                                                                        </button>
+
+                                                            {/* Actual Media Container with Scrollbar */}
+                                                            <div className="space-y-1">
+                                                                <p className="text-[10px] uppercase font-bold text-muted-foreground px-1">Đã lưu trong bộ nhớ ({roomMedia.length})</p>
+                                                                <div className="max-h-[220px] overflow-y-auto pr-1 scrollbar-thin border rounded-lg p-2 bg-muted/5">
+                                                                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                                                                        {roomMedia.map((m, idx) => (
+                                                                            <div key={idx} className="relative aspect-square rounded-md overflow-hidden border bg-white group/img">
+                                                                                <img src={getImageUrl(m.url)} className="w-full h-full object-cover" />
+                                                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                                                    <button
+                                                                                        className="bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 transition-colors shadow-lg"
+                                                                                        onClick={() => handleMediaDelete(m, idx)}
+                                                                                    >
+                                                                                        <X className="h-4 w-4" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                        {roomMedia.length === 0 && (
+                                                                            <div className="col-span-full py-8 flex flex-col items-center justify-center text-muted-foreground opacity-50">
+                                                                                <ImageIcon className="h-8 w-8 mb-1" />
+                                                                                <p className="text-xs italic">Chưa có ảnh nào</p>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
-                                                                ))}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1145,46 +1229,64 @@ export const ServiceDetail = () => {
                                         <CardContent className="space-y-4">
                                             {service.rooms?.map((room: any) => (
                                                 <div key={room.idRoom} className="p-4 border rounded-xl hover:border-primary/50 transition-colors bg-card group/room">
-                                                    <div className="flex justify-between items-start mb-3">
-                                                        <div>
-                                                            <h4 className="font-bold text-lg">{room.nameRoom}</h4>
-                                                            <p className="text-xs text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Tối đa {room.maxGuest} người</p>
-                                                        </div>
-                                                        <div className="flex flex-col items-end">
-                                                            <div className="flex gap-2 mb-1 opacity-0 group-hover/room:opacity-100 transition-opacity">
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    className="h-7 w-7 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                                                                    onClick={() => {
-                                                                        setEditingRoomId(room.idRoom);
-                                                                        setRoomName(room.nameRoom || '');
-                                                                        setRoomMaxGuest((room.maxGuest || 2).toString());
-                                                                        setRoomPrice((room.price || 0).toString());
-                                                                        setRoomFacilities(room.attribute?.facilities || []);
-                                                                        setRoomDescription(room.description || '');
-                                                                        setRoomMedia(room.media || []);
-                                                                        setIsAddRoomOpen(true);
-                                                                    }}
-                                                                >
-                                                                    <Settings className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
-                                                                    onClick={() => {
-                                                                        if (confirm('Bạn có chắc chắn muốn xóa hạng phòng này?')) {
-                                                                            deleteRoomMut.mutate(room.idRoom);
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
+                                                    <div className="flex-1">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div>
+                                                                <h4 className="font-bold text-lg text-foreground/90 group-hover/room:text-primary transition-colors">{room.nameRoom}</h4>
+                                                                <p className="text-xs text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Tối đa {room.maxGuest} người</p>
                                                             </div>
-                                                            <p className="text-primary font-bold">{room.price?.toLocaleString()} VNĐ</p>
-                                                            <p className="text-[10px] text-muted-foreground uppercase">mỗi đêm</p>
+                                                            <div className="flex flex-col items-end">
+                                                                <div className="flex gap-2 mb-1 opacity-0 group-hover/room:opacity-100 transition-opacity">
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50 bg-white shadow-sm border"
+                                                                        onClick={() => {
+                                                                            setEditingRoomId(room.idRoom);
+                                                                            setRoomName(room.nameRoom || '');
+                                                                            setRoomMaxGuest((room.maxGuest || 2).toString());
+                                                                            setRoomPrice((room.price || 0).toString());
+                                                                            setRoomFacilities(room.attribute?.facilities || []);
+                                                                            setRoomDescription(room.description || '');
+                                                                            setRoomMedia(room.media || []);
+                                                                            setIsAddRoomOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        <Settings className="h-4 w-4" />
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 bg-white shadow-sm border"
+                                                                        onClick={() => {
+                                                                            if (confirm('Bạn có chắc chắn muốn xóa hạng phòng này?')) {
+                                                                                deleteRoomMut.mutate(room.idRoom);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                </div>
+                                                                <p className="text-primary font-bold text-lg leading-none">{room.price?.toLocaleString()} VNĐ</p>
+                                                                <p className="text-[10px] text-muted-foreground uppercase mt-1">mỗi đêm</p>
+                                                            </div>
                                                         </div>
+
+                                                        {/* Room Image Thumbnails in List */}
+                                                        {room.media && room.media.length > 0 && (
+                                                            <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-hide">
+                                                                {room.media.slice(0, 6).map((m: any, i: number) => (
+                                                                    <div key={i} className="h-14 w-20 shrink-0 rounded-md overflow-hidden border bg-muted shadow-sm">
+                                                                        <img src={getImageUrl(m.url)} className="w-full h-full object-cover hover:scale-110 transition-transform duration-300" />
+                                                                    </div>
+                                                                ))}
+                                                                {room.media.length > 6 && (
+                                                                    <div className="h-14 w-14 shrink-0 rounded-md border bg-muted/50 flex items-center justify-center text-[10px] font-bold text-muted-foreground select-none">
+                                                                        +{room.media.length - 6}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="flex flex-wrap gap-1">
                                                         {room.attribute?.facilities?.map((f: string) => (

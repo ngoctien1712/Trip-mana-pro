@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { voucherApi, type Voucher } from '@/api/voucher.api';
 import { ownerGeographyApi } from '@/api/owner-geography.api';
@@ -44,7 +44,8 @@ import {
     AlertCircle,
     Copy,
     ChevronRight,
-    Package
+    Package,
+    Info
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
@@ -56,6 +57,8 @@ export default function Vouchers() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
+    const fromDateRef = useRef<HTMLInputElement>(null);
+    const toDateRef = useRef<HTMLInputElement>(null);
 
     // Form states
     const [formData, setFormData] = useState<Partial<Voucher>>({
@@ -447,7 +450,7 @@ export default function Vouchers() {
 
             {/* Create/Edit Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-2xl overflow-y-auto max-h-[90vh]">
+                <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
                     <DialogHeader>
                         <DialogTitle>{editingVoucher ? 'Chỉnh sửa Voucher' : 'Tạo Voucher mới'}</DialogTitle>
                         <CardDescription>Cung cấp mã ưu đãi cho khách hàng của bạn.</CardDescription>
@@ -626,30 +629,40 @@ export default function Vouchers() {
                                 )}
 
                                 {formData.voucherType === 'time' && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end bg-purple-50/30 p-3 rounded-lg border border-purple-100">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-purple-50/50 p-4 rounded-xl border border-purple-100 shadow-sm">
                                         <div className="space-y-2">
-                                            <Label htmlFor="from" className="font-bold text-xs text-purple-700 flex items-center gap-1">
-                                                <Calendar className="h-3 w-3" /> Từ ngày
+                                            <Label htmlFor="from" className="font-bold text-xs text-purple-700 flex items-center gap-1.5 px-0.5">
+                                                <Calendar className="h-3.5 w-3.5" /> Từ ngày
                                             </Label>
-                                            <Input
-                                                id="from"
-                                                type="date"
-                                                className="border-purple-200 focus-visible:ring-purple-500 w-full bg-white"
-                                                value={formData.from}
-                                                onChange={e => setFormData({ ...formData, from: e.target.value })}
-                                            />
+                                            <div className="relative group">
+                                                <Input
+                                                    id="from"
+                                                    ref={fromDateRef}
+                                                    type="date"
+                                                    className="border-purple-200 focus-visible:ring-purple-500 w-full bg-white transition-all min-w-[160px]"
+                                                    value={formData.from}
+                                                    onChange={e => setFormData({ ...formData, from: e.target.value })}
+                                                />
+                                            </div>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="to" className="font-bold text-xs text-purple-700 flex items-center gap-1">
-                                                <Calendar className="h-3 w-3" /> Đến ngày
+                                            <Label htmlFor="to" className="font-bold text-xs text-purple-700 flex items-center gap-1.5 px-0.5">
+                                                <Calendar className="h-3.5 w-3.5" /> Đến ngày
                                             </Label>
-                                            <Input
-                                                id="to"
-                                                type="date"
-                                                className="border-purple-200 focus-visible:ring-purple-500 w-full bg-white"
-                                                value={formData.to}
-                                                onChange={e => setFormData({ ...formData, to: e.target.value })}
-                                            />
+                                            <div className="relative group">
+                                                <Input
+                                                    id="to"
+                                                    ref={toDateRef}
+                                                    type="date"
+                                                    className="border-purple-200 focus-visible:ring-purple-500 w-full bg-white transition-all min-w-[160px]"
+                                                    value={formData.to}
+                                                    onChange={e => setFormData({ ...formData, to: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="col-span-full p-2 bg-purple-100/30 rounded-lg text-[10px] text-purple-600 italic flex gap-1.5 mt-1 border border-purple-100/50">
+                                            <Info className="h-3 w-3 shrink-0" />
+                                            Voucher có hiệu lực từ 00:00 ngày bắt đầu đến 23:59 ngày kết thúc.
                                         </div>
                                     </div>
                                 )}
