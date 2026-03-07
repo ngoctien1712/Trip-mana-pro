@@ -291,7 +291,7 @@ export const getService = async (req: Request, res: Response) => {
         bi.*, 
         p.name AS provider_name, 
         p.phone AS provider_phone,
-        p.image AS provider_image,
+        p.legal_documents AS provider_legal_documents,
         p.description AS provider_description,
         p.address AS provider_address,
         p.email AS provider_email,

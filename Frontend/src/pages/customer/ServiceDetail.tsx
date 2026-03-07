@@ -52,6 +52,7 @@ interface ServiceDetail {
   provider_name?: string;
   provider_phone?: string;
   provider_image?: string;
+  provider_legal_documents?: string[];
 
   // Location
   area_name?: string;
@@ -1180,7 +1181,9 @@ export default function ServiceDetail() {
               <div className="bg-white rounded-[2.5rem] p-8 border border-gray-50 shadow-sm space-y-8">
                 <div className="flex items-center gap-5">
                   <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gray-50 border-4 border-white shadow-xl relative">
-                    {service.provider_image ? (
+                    {service.provider_legal_documents && service.provider_legal_documents.length > 0 ? (
+                      <img src={getImageUrl(service.provider_legal_documents[0])} alt={service.provider_name} className="w-full h-full object-cover" />
+                    ) : service.provider_image ? (
                       <img src={getImageUrl(service.provider_image)} alt={service.provider_name} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-200"><User size={32} /></div>
