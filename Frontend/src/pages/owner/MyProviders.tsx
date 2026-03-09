@@ -354,18 +354,18 @@ export const MyProviders = () => {
               </Select>
             </div>
             <div>
-              <Label>Thành phố</Label>
+              <Label>Tỉnh / Thành phố</Label>
               <Select value={cityId} onValueChange={(v) => { setCityId(v); setAreaId(''); }} disabled={!countryId}>
-                <SelectTrigger><SelectValue placeholder="Chọn thành phố" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Chọn Tỉnh / Thành phố" /></SelectTrigger>
                 <SelectContent>
-                  {cities.map((c: City) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {cities.map((c: City) => <SelectItem key={c.id} value={c.id}>{c.nameVi || c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Khu vực</Label>
+              <Label>Phường / Xã</Label>
               <Select value={areaId} onValueChange={setAreaId} disabled={!cityId}>
-                <SelectTrigger><SelectValue placeholder="Chọn khu vực" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Chọn Phường / Xã" /></SelectTrigger>
                 <SelectContent>
                   {areas.map((a: Area) => (
                     <SelectItem key={a.id} value={a.id}>

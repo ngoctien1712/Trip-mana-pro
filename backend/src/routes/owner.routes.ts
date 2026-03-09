@@ -139,4 +139,8 @@ router.post(
   ownerController.createBookableItem
 );
 
+router.get('/orders', ownerController.listOrders);
+router.get('/orders/:idOrder', ownerController.getOrder);
+router.put('/orders/:idOrder/status', ownerController.updateOrderStatus);
+
 export default router;

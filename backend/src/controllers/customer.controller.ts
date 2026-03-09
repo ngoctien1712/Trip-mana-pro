@@ -698,10 +698,21 @@ export const getBookedSeats = async (req: Request, res: Response) => {
 export const listOrders = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
+    const { type } = req.query;
     if (!userId) return res.status(401).json({ message: 'Chưa đăng nhập' });
 
+    let whereClause = 'WHERE o.id_user = $1';
+    const params: any[] = [userId];
+
+    if (type) {
+      whereClause += ' AND bi.item_type = $2';
+      params.push(type);
+    }
+
     const orders = await query(`
-      SELECT o.*, bi.title as service_name, bi.item_type
+      SELECT o.*, bi.title as service_name, bi.item_type, bi.price as unit_price,
+             a.name as city_name,
+             (SELECT url FROM item_media WHERE id_item = bi.id_item LIMIT 1) as thumbnail
       FROM "order" o
       LEFT JOIN (
         SELECT id_order, id_item FROM order_tour_detail
@@ -713,9 +724,10 @@ export const listOrders = async (req: Request, res: Response) => {
         SELECT id_order, v.id_item FROM order_pos_vehicle_detail d JOIN positions p ON p.id_position = d.id_position JOIN vehicle v ON v.id_vehicle = p.id_vehicle
       ) od ON o.id_order = od.id_order
       LEFT JOIN bookable_items bi ON bi.id_item = od.id_item
-      WHERE o.id_user = $1
+      LEFT JOIN area a ON a.id_area = bi.id_area
+      ${whereClause}
       ORDER BY o.create_at DESC
-    `, [userId]);
+    `, params);
 
     res.json(orders.rows.map((o: any) => ({ ...o, create_at: toIso(o.create_at) })));
   } catch (err) {

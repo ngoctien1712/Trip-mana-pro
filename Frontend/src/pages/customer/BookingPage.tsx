@@ -259,7 +259,7 @@ export default function BookingPage() {
                 orderContacts[result.id_order] = formData.guestInfo;
                 localStorage.setItem('order_pending_contacts', JSON.stringify(orderContacts));
 
-                navigate(`/my-orders/${result.id_order}`);
+                navigate(`/my-orders/${result.id_order}?type=${service.item_type}`);
             }
         } catch (error) {
             alert('Đã có lỗi xảy ra khi tạo đơn hàng');

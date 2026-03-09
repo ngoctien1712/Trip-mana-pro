@@ -73,8 +73,9 @@ export default function Checkout() {
       // Try to process payment
       await customerApi.createPayment(order.id_order, paymentMethod);
 
-      alert('Đơn hàng được tạo thành công!');
-      navigate(`/my-orders/${order.id_order}`);
+      alert('Don hàng được tạo thành công!');
+      const primaryType = cart.items[0]?.item_type || 'accommodation';
+      navigate(`/my-orders/${order.id_order}?type=${primaryType}`);
     } catch (error) {
       console.error('Lỗi khi tạo đơn hàng:', error);
       alert('Lỗi khi tạo đơn hàng');

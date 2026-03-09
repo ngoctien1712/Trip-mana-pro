@@ -169,7 +169,7 @@ export const PendingBusinessApprovals = () => {
                                                                             <h4 className="font-bold flex items-center gap-2 text-primary border-l-4 border-primary pl-2 uppercase text-xs">Thông tin kinh doanh</h4>
                                                                             <div className="grid grid-cols-1 gap-2 p-3 bg-muted/30 rounded-lg text-sm">
                                                                                 <div className="flex justify-between"><span>Loại hình:</span> <Badge className="capitalize">{selectedRequest.service_type}</Badge></div>
-                                                                                <div className="flex justify-between"><span>Khu vực:</span> <span className="font-medium">{selectedRequest.area_name}, {selectedRequest.city_name}</span></div>
+                                                                                <div className="flex justify-between"><span>Phường / Xã:</span> <span className="font-medium">{selectedRequest.area_name}, {selectedRequest.city_name}</span></div>
                                                                                 <div className="flex justify-between"><span>SĐT Doanh nghiệp:</span> <span className="font-medium">{selectedRequest.business_phone || selectedRequest.phone}</span></div>
                                                                             </div>
                                                                         </section>

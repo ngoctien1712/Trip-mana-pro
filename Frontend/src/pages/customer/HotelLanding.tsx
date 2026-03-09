@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { customerApi } from '@/api/customer.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Search, MapPin, Calendar, Users, Star, ArrowRight, Building2, ShieldCheck, Zap } from 'lucide-react';
+import { Search, MapPin, Calendar, Users, Star, ArrowRight, Building2, ShieldCheck, Zap, Receipt, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/utils/format';
 import { ServiceCardSkeleton } from '@/components/LoadingSkeleton';
@@ -13,13 +13,13 @@ import { ServiceCardSkeleton } from '@/components/LoadingSkeleton';
 import { geographyApi } from '@/api/geography.api';
 
 export const HotelLanding = () => {
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [provinceId, setProvinceId] = useState('');
     const [districtId, setDistrictId] = useState('');
     const [wardId, setWardId] = useState('');
 
     const [provinces, setProvinces] = useState<any[]>([]);
-    const [districts, setDistricts] = useState<any[]>([]);
     const [wards, setWards] = useState<any[]>([]);
 
     // Search Filters
@@ -47,32 +47,21 @@ export const HotelLanding = () => {
         });
     }, []);
 
-    // Fetch Districts
+    // Fetch Wards directly from Province
     useEffect(() => {
         if (provinceId) {
-            geographyApi.listAreas(provinceId).then(res => setDistricts(res.data));
-        } else {
-            setDistricts([]);
-            setDistrictId('');
-        }
-    }, [provinceId]);
-
-    // Fetch Wards
-    useEffect(() => {
-        if (districtId) {
-            geographyApi.listWards(districtId).then(res => setWards(res.data));
+            geographyApi.listAreas(provinceId).then(res => setWards(res.data));
         } else {
             setWards([]);
             setWardId('');
         }
-    }, [districtId]);
+    }, [provinceId]);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['listHotels', provinceId, districtId, wardId, search, checkInDate, checkOutDate, guestCount],
+        queryKey: ['listHotels', provinceId, wardId, search, checkInDate, checkOutDate, guestCount],
         queryFn: () => customerApi.listServices({
             type: 'accommodation',
             provinceId,
-            districtId,
             wardId,
             q: search,
             checkIn: checkInDate,
@@ -94,9 +83,15 @@ export const HotelLanding = () => {
                     <h1 className="text-4xl md:text-5xl font-black mb-4 drop-shadow-xl tracking-tight">
                         Nghỉ dưỡng đẳng cấp, giá hời nhất
                     </h1>
-                    <p className="text-lg opacity-90 font-medium drop-shadow-md">
+                    <p className="text-lg opacity-90 font-medium drop-shadow-md mb-8">
                         Hơn 1.000.000 khách sạn, biệt thự và căn hộ đang chờ bạn khám phá
                     </p>
+                    <Button
+                        onClick={() => navigate('/my-orders?type=accommodation')}
+                        className="bg-white/20 hover:bg-white/30 text-white border border-white/30 backdrop-blur-md rounded-2xl px-8 h-14 font-black text-sm uppercase tracking-widest transition-all shadow-2xl"
+                    >
+                        <Receipt className="mr-3 h-5 w-5" /> Đơn hàng của tôi
+                    </Button>
                 </div>
             </section>
 
@@ -104,95 +99,88 @@ export const HotelLanding = () => {
             <div className="container max-w-6xl relative z-20 -mt-24 px-4">
                 <Card className="shadow-2xl border-none rounded-[2rem] overflow-hidden bg-white">
                     <CardContent className="p-8">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Tỉnh / Thành phố</label>
-                                <select
-                                    className="w-full h-14 pl-4 bg-gray-50 border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-600 font-bold appearance-none cursor-pointer"
-                                    value={provinceId}
-                                    onChange={(e) => setProvinceId(e.target.value)}
-                                >
-                                    <option value="">Thành phố</option>
-                                    {provinces.map(p => <option key={p.id} value={p.id}>{p.nameVi || p.name}</option>)}
-                                </select>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-y-7 gap-x-8">
+                            {/* Row 1 */}
+                            <div className="space-y-2.5">
+                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Tỉnh / Thành phố</label>
+                                <div className="relative">
+                                    <select
+                                        className="w-full h-14 pl-4 pr-10 bg-gray-50 border-none rounded-[1.25rem] focus:ring-2 focus:ring-blue-600 font-bold appearance-none cursor-pointer text-gray-700"
+                                        value={provinceId}
+                                        onChange={(e) => { setProvinceId(e.target.value); setWardId(''); }}
+                                    >
+                                        <option value="">Thành phố</option>
+                                        {provinces.map(p => <option key={p.id} value={p.id}>{p.nameVi || p.name}</option>)}
+                                    </select>
+                                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                                </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Quận / Huyện</label>
-                                <select
-                                    className="w-full h-14 pl-4 bg-gray-50 border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-600 font-bold appearance-none cursor-pointer disabled:opacity-50"
-                                    value={districtId}
-                                    onChange={(e) => setDistrictId(e.target.value)}
-                                    disabled={!provinceId}
-                                >
-                                    <option value="">Chọn Quận / Huyện</option>
-                                    {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                                </select>
+                            <div className="space-y-2.5">
+                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Phường / Xã</label>
+                                <div className="relative">
+                                    <select
+                                        className="w-full h-14 pl-4 pr-10 bg-gray-50 border-none rounded-[1.25rem] focus:ring-2 focus:ring-blue-600 font-bold appearance-none cursor-pointer disabled:opacity-50 text-gray-700"
+                                        value={wardId}
+                                        onChange={(e) => setWardId(e.target.value)}
+                                        disabled={!provinceId}
+                                    >
+                                        <option value="">Chọn Phường / Xã</option>
+                                        {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                    </select>
+                                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                                </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Phường / Xã</label>
-                                <select
-                                    className="w-full h-14 pl-4 bg-gray-50 border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-600 font-bold appearance-none cursor-pointer disabled:opacity-50"
-                                    value={wardId}
-                                    onChange={(e) => setWardId(e.target.value)}
-                                    disabled={!districtId}
-                                >
-                                    <option value="">Chọn Phường / Xã</option>
-                                    {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                </select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Tìm theo tên</label>
+                            <div className="space-y-2.5 lg:col-span-2">
+                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Tìm theo tên</label>
                                 <div className="relative group">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                     <Input
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
                                         placeholder="Tên khách sạn..."
-                                        className="pl-12 h-14 bg-gray-50 border-gray-100 rounded-2xl focus-visible:ring-blue-600 font-bold"
+                                        className="pl-12 h-14 bg-gray-50 border-none rounded-[1.25rem] focus-visible:ring-blue-600 font-bold text-gray-700 placeholder:text-gray-300"
                                     />
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Ngày nhận phòng</label>
+                            {/* Row 2 */}
+                            <div className="space-y-2.5">
+                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Ngày nhận phòng</label>
                                 <div className="relative group">
                                     <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500" />
                                     <Input
                                         type="date"
                                         value={checkInDate}
                                         onChange={(e) => setCheckInDate(e.target.value)}
-                                        className="pl-12 h-14 bg-gray-50 border-gray-100 rounded-2xl focus-visible:ring-blue-600 font-bold"
+                                        className="pl-12 h-14 bg-gray-50 border-none rounded-[1.25rem] focus-visible:ring-blue-600 font-bold text-gray-700"
                                     />
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Ngày trả phòng</label>
+                            <div className="space-y-2.5">
+                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Ngày trả phòng</label>
                                 <div className="relative group">
                                     <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500" />
                                     <Input
                                         type="date"
                                         value={checkOutDate}
                                         onChange={(e) => setCheckOutDate(e.target.value)}
-                                        className="pl-12 h-14 bg-gray-50 border-gray-100 rounded-2xl focus-visible:ring-blue-600 font-bold"
+                                        className="pl-12 h-14 bg-gray-50 border-none rounded-[1.25rem] focus-visible:ring-blue-600 font-bold text-gray-700"
                                         min={checkInDate}
                                     />
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Số lượng khách</label>
+                            <div className="space-y-2.5">
+                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Số lượng khách</label>
                                 <div className="relative group">
                                     <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500" />
                                     <select
                                         value={guestCount}
                                         onChange={(e) => setGuestCount(e.target.value)}
-                                        className="w-full h-14 pl-12 bg-gray-50 border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-600 font-bold appearance-none cursor-pointer"
+                                        className="w-full h-14 pl-12 pr-10 bg-gray-50 border-none rounded-[1.25rem] focus:ring-2 focus:ring-blue-600 font-bold appearance-none cursor-pointer text-gray-700"
                                     >
                                         <option value="1">1 Khách</option>
                                         <option value="2">2 Khách</option>
@@ -200,12 +188,13 @@ export const HotelLanding = () => {
                                         <option value="4">4 Khách</option>
                                         <option value="5">5+ Khách</option>
                                     </select>
+                                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                                 </div>
                             </div>
 
-                            <div>
-                                <Button className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-black text-lg rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-[0.98]">
-                                    <Search className="mr-2 h-5 w-5" /> Tìm khách sạn
+                            <div className="flex flex-col justify-end">
+                                <Button className="w-full h-14 bg-[#2D68F8] hover:bg-blue-700 text-white font-black text-md rounded-[1.25rem] shadow-xl shadow-blue-100 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                                    <Search className="h-5 w-5" /> Tìm khách sạn
                                 </Button>
                             </div>
                         </div>

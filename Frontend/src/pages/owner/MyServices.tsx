@@ -64,7 +64,6 @@ export const MyServices = () => {
     const [error, setError] = useState('');
 
     const [provinces, setProvinces] = useState<any[]>([]);
-    const [districts, setDistricts] = useState<any[]>([]);
     const [wards, setWards] = useState<any[]>([]);
 
     // Fetch Provinces (Cities) for Vietnam
@@ -82,25 +81,15 @@ export const MyServices = () => {
         }
     }, [serviceOpen]);
 
-    // Fetch Districts (Areas)
+    // Fetch Wards directly from Province
     useEffect(() => {
         if (provinceId) {
-            geographyApi.listAreas(provinceId).then(res => setDistricts(res.data));
-        } else {
-            setDistricts([]);
-            setDistrictId('');
-        }
-    }, [provinceId]);
-
-    // Fetch Wards
-    useEffect(() => {
-        if (districtId) {
-            geographyApi.listWards(districtId).then(res => setWards(res.data));
+            geographyApi.listAreas(provinceId).then(res => setWards(res.data));
         } else {
             setWards([]);
             setWardId('');
         }
-    }, [districtId]);
+    }, [provinceId]);
 
     const { data: providersData } = useQuery({
         queryKey: ['owner', 'providers'],
@@ -113,7 +102,7 @@ export const MyServices = () => {
         if (serviceProviderId) {
             const provider = providers.find((p: any) => p.id === serviceProviderId);
             if (provider && provider.serviceType) {
-                setItemType(provider.serviceType);
+                setItemType(provider.serviceType as 'tour' | 'accommodation' | 'vehicle' | 'ticket');
             }
         }
     }, [serviceProviderId, providers]);
@@ -274,7 +263,7 @@ export const MyServices = () => {
             </Card>
 
             <Dialog open={serviceOpen} onOpenChange={setServiceOpen}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Tạo dịch vụ mới</DialogTitle>
                     </DialogHeader>
@@ -354,31 +343,22 @@ export const MyServices = () => {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label>Tỉnh / Thành phố</Label>
-                                            <Select value={provinceId} onValueChange={(v) => { setProvinceId(v); setDistrictId(''); setWardId(''); }}>
-                                                <SelectTrigger><SelectValue placeholder="Chọn Tỉnh/Thành" /></SelectTrigger>
+                                            <Select value={provinceId} onValueChange={(v) => { setProvinceId(v); setWardId(''); }}>
+                                                <SelectTrigger><SelectValue placeholder="Chọn Tỉnh / Thành phố" /></SelectTrigger>
                                                 <SelectContent>
                                                     {provinces.map(p => <SelectItem key={p.id} value={p.id}>{p.nameVi || p.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label>Quận / Huyện</Label>
-                                            <Select value={districtId} onValueChange={(v) => { setDistrictId(v); setWardId(''); }} disabled={!provinceId}>
-                                                <SelectTrigger><SelectValue placeholder="Chọn Quận/Huyện" /></SelectTrigger>
+                                            <Label>Phường / Xã</Label>
+                                            <Select value={wardId} onValueChange={setWardId} disabled={!provinceId}>
+                                                <SelectTrigger><SelectValue placeholder="Chọn Phường / Xã" /></SelectTrigger>
                                                 <SelectContent>
-                                                    {districts.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                                    {wards.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Phường / Xã</Label>
-                                        <Select value={wardId} onValueChange={setWardId} disabled={!districtId}>
-                                            <SelectTrigger><SelectValue placeholder="Chọn Phường/Xã" /></SelectTrigger>
-                                            <SelectContent>
-                                                {wards.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
                                     </div>
                                     <div className="space-y-2">
                                         <Label>Số nhà, tên đường</Label>
@@ -446,7 +426,6 @@ export const MyServices = () => {
                                         extraData = {
                                             address: specificAddress,
                                             provinceId,
-                                            districtId,
                                             wardId,
                                             specificAddress
                                         };

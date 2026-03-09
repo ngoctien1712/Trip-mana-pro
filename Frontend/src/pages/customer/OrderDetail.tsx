@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
@@ -17,6 +17,8 @@ import {
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromType = searchParams.get('type');
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export default function OrderDetail() {
     try {
       await customerApi.cancelOrder(id!);
       alert('Đơn hàng đã bị hủy');
-      navigate('/my-orders');
+      navigate(fromType ? `/my-orders?type=${fromType}` : '/my-orders');
     } catch (error) {
       alert('Lỗi khi hủy đơn hàng');
     }
@@ -148,7 +150,7 @@ export default function OrderDetail() {
     <div className="min-h-screen bg-[#F8FAFC] pb-24">
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="container max-w-5xl px-4 h-16 flex items-center justify-between">
-          <Button variant="ghost" onClick={() => navigate('/my-orders')} className="font-bold gap-2">
+          <Button variant="ghost" onClick={() => navigate(fromType ? `/my-orders?type=${fromType}` : '/my-orders')} className="font-bold gap-2">
             <ChevronLeft size={18} /> Quay lại danh sách
           </Button>
           <h1 className="text-sm font-black uppercase tracking-[0.2em] text-gray-400">Chi tiết hóa đơn</h1>
@@ -404,7 +406,7 @@ export default function OrderDetail() {
                   <p className="text-emerald-100 font-medium">Hệ thống đã xác nhận giao dịch của bạn. Chúc bạn có một hành trình tuyệt vời!</p>
                 </div>
                 <div className="flex flex-wrap justify-center gap-4 pt-4">
-                  <Button onClick={() => navigate('/my-orders')} className="bg-white text-emerald-600 hover:bg-emerald-50 rounded-2xl h-12 px-8 font-black">QUẢN LÝ ĐƠN HÀNG</Button>
+                  <Button onClick={() => navigate(fromType ? `/my-orders?type=${fromType}` : '/my-orders')} className="bg-white text-emerald-600 hover:bg-emerald-50 rounded-2xl h-12 px-8 font-black">QUẢN LÝ ĐƠN HÀNG</Button>
                   <Button variant="outline" onClick={() => window.print()} className="border-white/30 text-white hover:bg-white/10 rounded-2xl h-12 px-8 font-black">IN VÉ / HÓA ĐƠN</Button>
                 </div>
               </Card>

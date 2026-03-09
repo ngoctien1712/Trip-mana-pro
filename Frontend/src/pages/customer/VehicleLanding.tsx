@@ -5,7 +5,7 @@ import { customerApi } from '@/api/customer.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Bus, MapPin, Calendar, Users, ArrowRightLeft, ShieldCheck, Clock, Zap, Repeat, Search } from 'lucide-react';
+import { Bus, MapPin, Calendar, Users, ArrowRightLeft, ShieldCheck, Clock, Zap, Repeat, Search, Receipt } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/utils/format';
 import { ServiceCardSkeleton } from '@/components/LoadingSkeleton';
@@ -96,9 +96,15 @@ export const VehicleLanding = () => {
                     <h1 className="text-4xl md:text-5xl font-black mb-4 drop-shadow-xl tracking-tight">
                         Vé xe khách & Tuyến đường dài
                     </h1>
-                    <p className="text-lg opacity-90 font-medium drop-shadow-md">
+                    <p className="text-lg opacity-90 font-medium drop-shadow-md mb-8">
                         Tìm kiếm hàng ngàn chuyến xe mỗi ngày với giá cực ưu đãi
                     </p>
+                    <Button
+                        onClick={() => navigate('/my-orders?type=vehicle')}
+                        className="bg-white/20 hover:bg-white/30 text-white border border-white/30 backdrop-blur-md rounded-2xl px-8 h-14 font-black text-sm uppercase tracking-widest transition-all shadow-2xl"
+                    >
+                        <Receipt className="mr-3 h-5 w-5" /> Đơn hàng của tôi
+                    </Button>
                 </div>
             </section>
 
@@ -134,7 +140,7 @@ export const VehicleLanding = () => {
                                             value={fromProvinceId}
                                             onChange={(e) => setFromProvinceId(e.target.value)}
                                         >
-                                            <option value="">Thành phố đi</option>
+                                            <option value="">Tỉnh / Thành phố đi</option>
                                             {provinces.map(p => <option key={p.id} value={p.id}>{p.nameVi || p.name}</option>)}
                                         </select>
                                     </div>
@@ -162,7 +168,7 @@ export const VehicleLanding = () => {
                                             value={toProvinceId}
                                             onChange={(e) => setToProvinceId(e.target.value)}
                                         >
-                                            <option value="">Thành phố đến</option>
+                                            <option value="">Tỉnh / Thành phố đến</option>
                                             {provinces.map(p => <option key={p.id} value={p.id}>{p.nameVi || p.name}</option>)}
                                         </select>
                                     </div>

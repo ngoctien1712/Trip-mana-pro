@@ -276,35 +276,7 @@ export default function ServiceDetail() {
 
   return (
     <div className="bg-[#f8fafc] min-h-screen pb-20 overflow-x-hidden font-sans relative">
-      {/* Full-height Skyscraper Ads */}
-      <div className="hidden 2xl:block fixed left-4 top-24 bottom-8 w-48 z-[5] group cursor-pointer">
-        <div className="h-full rounded-[2.5rem] overflow-hidden bg-white shadow-2xl border border-white/20 relative">
-          <img src={adLeft} className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110" alt="Halong Bay Ad" />
-          <div className="absolute inset-0 bg-gradient-to-t from-blue-900/90 via-blue-900/40 to-transparent p-10 flex flex-col justify-end text-white text-left items-start">
-            <div className="mb-auto">
-              <Badge className="bg-white/20 backdrop-blur text-white border-none font-bold text-[8px] uppercase tracking-widest px-3 py-1 mb-2">DI SẢN THẾ GIỚI</Badge>
-              <div className="h-1 w-12 bg-blue-400 rounded-full mb-4" />
-            </div>
-            <h4 className="text-2xl font-black uppercase italic leading-none mb-2">VỊNH <br /> HẠ LONG</h4>
-            <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-6 font-medium">Trải nghiệm du thuyền 5 sao đẳng cấp</p>
-            <Button size="sm" className="bg-white text-blue-900 hover:bg-blue-50 rounded-xl font-black text-[9px] uppercase tracking-widest h-10 w-full shadow-lg">KHÁM PHÁ NGAY</Button>
-          </div>
-        </div>
-      </div>
-      <div className="hidden 2xl:block fixed right-4 top-24 bottom-8 w-48 z-[5] group cursor-pointer">
-        <div className="h-full rounded-[2.5rem] overflow-hidden bg-white shadow-2xl border border-white/20 relative">
-          <img src={adRight} className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110" alt="Ancient Town Ad" />
-          <div className="absolute inset-0 bg-gradient-to-t from-orange-950/90 via-orange-900/40 to-transparent p-10 flex flex-col justify-end text-white text-right items-end">
-            <div className="mb-auto">
-              <Badge className="bg-white/20 backdrop-blur text-white border-none font-bold text-[8px] uppercase tracking-widest px-3 py-1 mb-2">HỘI AN CHILL</Badge>
-              <div className="h-1 w-12 bg-orange-400 rounded-full mb-4 ml-auto" />
-            </div>
-            <h4 className="text-2xl font-black uppercase italic leading-none mb-2">PHỐ CỔ <br /> HOÀI NIỆM</h4>
-            <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-6 font-medium text-right">Combo phòng khách sạn & vé show Ký Ức</p>
-            <Button size="sm" className="bg-white text-orange-900 hover:bg-orange-50 rounded-xl font-black text-[9px] uppercase tracking-widest h-10 w-full shadow-lg">ĐẶT VÉ NGAY</Button>
-          </div>
-        </div>
-      </div>
+
 
       <div className="container mx-auto px-4 lg:px-20 py-8">
         {/* Navigation Breadcrumb */}
@@ -760,16 +732,15 @@ export default function ServiceDetail() {
                             <div className="flex-1 flex flex-col">
                               {/* Table Headers */}
                               <div className="grid grid-cols-12 bg-[#F7F9FB] border-b border-gray-100 px-6 py-4 text-[11px] font-black uppercase tracking-widest text-gray-500">
-                                <div className="col-span-5 font-black text-[#1A2B48]">Lựa chọn phòng</div>
-                                <div className="col-span-2 text-center">Khách</div>
-                                <div className="col-span-3 text-center">Giá/phòng/đêm</div>
-                                <div className="col-span-1 text-center">Phòng</div>
-                                <div className="col-span-1"></div>
+                                <div className="col-span-4 font-black text-[#1A2B48]">Lựa chọn phòng</div>
+                                <div className="col-span-1 text-center">Khách</div>
+                                <div className="col-span-4 text-right pr-12">Giá/phòng/đêm</div>
+                                <div className="col-span-3 text-center">Thao tác</div>
                               </div>
 
                               {/* Table Row */}
                               <div className="grid grid-cols-12 flex-1 items-center px-6 py-8 divide-x divide-gray-50">
-                                <div className="col-span-5 pr-8 space-y-3">
+                                <div className="col-span-4 pr-8 space-y-3">
                                   <p className="text-[10px] font-bold text-gray-400 leading-tight">Deluxe Room - Breakfast Included</p>
                                   <h5 className="text-base font-black text-[#1A2B48]">Bữa sáng cho {room.max_guest} người</h5>
                                   <div className="space-y-1.5 pt-1">
@@ -782,35 +753,32 @@ export default function ServiceDetail() {
                                   </div>
                                 </div>
 
-                                <div className="col-span-2 px-4 flex justify-center items-center gap-1">
+                                <div className="col-span-1 px-2 flex justify-center items-center gap-0.5">
                                   {Array.from({ length: room.max_guest }).map((_, i) => (
-                                    <User key={i} size={20} className="text-gray-400" />
+                                    <User key={i} size={16} className="text-gray-400" />
                                   ))}
                                 </div>
 
-                                <div className="col-span-3 px-4 text-center space-y-1">
-                                  <p className="text-[12px] font-bold text-gray-400 line-through">{(room.price * 1.2).toLocaleString()} VND</p>
-                                  <p className="text-2xl font-black text-[#FF5E1F] tracking-tighter">{(room.price).toLocaleString()} VND</p>
-                                  <p className="text-[10px] font-bold text-gray-400">Chưa bao gồm thuế và phí</p>
+                                <div className="col-span-4 px-6 text-right space-y-1 pr-12">
+                                  <p className="text-[11px] font-bold text-gray-400 line-through">{(room.price * 1.2).toLocaleString()}đ</p>
+                                  <p className="text-xl font-black text-[#FF5E1F] tracking-tighter">{(room.price).toLocaleString()}đ</p>
+                                  <p className="text-[9px] font-bold text-gray-400">Chưa bao gồm thuế và phí</p>
                                 </div>
 
-                                <div className="col-span-1 px-4 text-center font-black text-gray-800 text-sm">
-                                  x1
-                                </div>
-
-                                <div className="col-span-1 pl-4 flex justify-end">
+                                <div className="col-span-3 pl-4 flex flex-col items-center gap-2">
                                   <Button
                                     onClick={() => {
                                       setSelectedRoom(room);
                                       setTimeout(() => document.getElementById('accommodation-booking-confirm')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
                                     }}
-                                    className={`h-11 px-8 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg ${isSelected
+                                    className={`h-11 w-full max-w-[140px] rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg ${isSelected
                                       ? 'bg-gray-900 text-white'
                                       : 'bg-[#0094FF] text-white hover:bg-blue-600 shadow-blue-100 hover:-translate-y-0.5'
                                       }`}
                                   >
                                     {isSelected ? 'ĐÃ CHỌN' : 'CHỌN'}
                                   </Button>
+                                  <p className="text-[9px] font-bold text-blue-600 uppercase tracking-tighter">Còn {room.attribute?.available || 5} phòng!</p>
                                 </div>
                               </div>
                             </div>
@@ -829,45 +797,40 @@ export default function ServiceDetail() {
                       <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
                       <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-600/20 rounded-full blur-[80px]" />
 
-                      <div className="bg-white/5 backdrop-blur-sm rounded-[2.3rem] p-8 md:p-10 flex flex-col lg:flex-row items-center justify-between gap-8 relative z-10 border border-white/10">
-                        <div className="flex items-center gap-8">
-                          <div className="w-24 h-24 rounded-3xl overflow-hidden border-4 border-white/10 shadow-2xl relative">
+                      <div className="bg-white/5 backdrop-blur-sm rounded-[2.3rem] py-10 px-6 md:px-10 flex flex-col lg:flex-row items-center justify-between gap-6 relative z-10 border border-white/10">
+                        <div className="flex items-center gap-6 w-full lg:w-auto">
+                          <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl shrink-0">
                             <img
                               src={getImageUrl(selectedRoom.media?.[0]?.url || selectedRoom.attribute?.images?.[0])}
                               className="w-full h-full object-cover"
                               alt="selected"
                             />
-                            <div className="absolute top-2 right-2 flex gap-1">
-                              <Star size={10} className="text-yellow-400 fill-yellow-400" />
-                            </div>
                           </div>
-                          <div className="space-y-2">
-                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em]">Phòng bạn đang chọn</p>
-                            <h4 className="text-2xl font-black text-white uppercase tracking-tight italic">{selectedRoom.name_room}</h4>
-                            <div className="flex items-center gap-4">
-                              <span className="flex items-center gap-2 text-xs font-black text-white/60"><Users size={14} className="text-blue-500" /> {selectedRoom.max_guest} Khách</span>
-                              <span className="flex items-center gap-2 text-xs font-black text-white/60"><Clock size={14} className="text-blue-500" /> Nhận phòng 14:00</span>
+                          <div className="space-y-1">
+                            <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em]">Phòng bạn đang chọn</p>
+                            <h4 className="text-xl font-black text-white uppercase tracking-tight italic line-clamp-1">{selectedRoom.name_room}</h4>
+                            <div className="flex items-center gap-3">
+                              <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/50"><Users size={12} className="text-blue-500" /> {selectedRoom.max_guest} Khách</span>
+                              <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/50"><Clock size={12} className="text-blue-500" /> Nhận 14:00</span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex flex-col md:flex-row items-center gap-8 lg:gap-12 w-full lg:w-auto">
-                          <div className="text-center lg:text-right space-y-1">
-                            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Giá tạm tính (1 đêm)</p>
-                            <div className="flex items-baseline gap-2 justify-center lg:justify-end">
-                              <span className="text-4xl font-black text-white tracking-tighter">{(selectedRoom.price).toLocaleString()}đ</span>
+                        <div className="flex flex-col sm:flex-row items-center gap-6 lg:gap-8 w-full lg:w-auto border-t lg:border-t-0 lg:border-l border-white/10 pt-6 lg:pt-0 lg:pl-8">
+                          <div className="text-center sm:text-right space-y-0.5">
+                            <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Giá tạm tính (1 đêm)</p>
+                            <div className="flex items-baseline gap-1 justify-center sm:justify-end">
+                              <span className="text-3xl font-black text-white tracking-tighter">{Math.floor(selectedRoom.price).toLocaleString()}đ</span>
                             </div>
-                            <p className="text-[9px] font-black text-emerald-400 uppercase tracking-tighter">Miễn phí hủy phòng trước 24h</p>
+                            <p className="text-[8px] font-bold text-emerald-400 uppercase tracking-tighter">Miễn phí hủy phòng</p>
                           </div>
 
                           <Button
                             onClick={handleBookingRedirect}
-                            className="bg-blue-600 hover:bg-blue-500 text-white px-12 h-16 rounded-2xl font-black text-lg shadow-xl shadow-blue-900/50 hover:shadow-blue-600/40 transition-all hover:scale-105 active:scale-95 group uppercase tracking-tight flex items-center gap-4"
+                            className="bg-blue-600 hover:bg-blue-500 text-white px-8 h-14 rounded-xl font-black text-sm shadow-xl shadow-blue-900/50 hover:shadow-blue-600/40 transition-all hover:scale-105 active:scale-95 group uppercase tracking-tight flex items-center gap-3 w-full sm:w-auto"
                           >
-                            Xác nhận & Đặt phòng ngay
-                            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center group-hover:translate-x-1 transition-transform">
-                              <ChevronRight size={20} />
-                            </div>
+                            ĐẶT PHÒNG NGAY
+                            <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
                           </Button>
                         </div>
                       </div>
@@ -1159,7 +1122,7 @@ export default function ServiceDetail() {
                   <div className="mt-4 flex flex-col gap-3">
                     <Button
                       variant="ghost"
-                      onClick={() => navigate('/my-orders')}
+                      onClick={() => navigate(`/my-orders?type=${service.item_type}`)}
                       className="text-gray-400 hover:text-blue-600 font-bold text-xs uppercase tracking-widest h-auto p-2"
                     >
                       Lịch sử đặt chỗ của tôi

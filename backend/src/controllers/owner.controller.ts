@@ -1107,3 +1107,213 @@ export async function deleteVehicleTrip(req: Request, res: Response) {
     res.status(500).json({ message: 'Lỗi máy chủ' });
   }
 }
+
+/** List orders for the current owner's services */
+export async function listOrders(req: Request, res: Response) {
+  try {
+    const userId = req.user!.userId;
+    const { status, search } = req.query;
+
+    const params: any[] = [userId];
+    let whereClause = 'WHERE p.id_user = $1';
+    let idx = 2;
+
+    if (status && status !== 'all') {
+      whereClause += ` AND o.status = $${idx++}`;
+      params.push(status);
+    }
+
+    if (search) {
+      whereClause += ` AND (o.order_code ILIKE $${idx} OR u.full_name ILIKE $${idx} OR bi.title ILIKE $${idx})`;
+      params.push(`%${search}%`);
+      idx++;
+    }
+
+    const { rows } = await pool.query(
+      `SELECT o.id_order, o.order_code, o.total_amount, o.status, o.create_at, o.currency,
+              u.full_name as customer_name, u.phone as customer_phone,
+              bi.title as service_name, bi.item_type,
+              p.name as provider_name
+       FROM "order" o
+       JOIN (
+         SELECT id_order, id_item FROM order_tour_detail
+         UNION ALL
+         SELECT id_order, id_item FROM order_ticket_detail
+         UNION ALL
+         SELECT id_order, r.id_item FROM order_accommodations_detail d JOIN accommodations_rooms r ON r.id_room = d.id_room
+         UNION ALL
+         SELECT id_order, v.id_item FROM order_pos_vehicle_detail d JOIN positions p ON p.id_position = d.id_position JOIN vehicle v ON v.id_vehicle = p.id_vehicle
+       ) od ON o.id_order = od.id_order
+       JOIN bookable_items bi ON bi.id_item = od.id_item
+       JOIN provider p ON p.id_provider = bi.id_provider
+       JOIN users u ON u.id_user = o.id_user
+       ${whereClause}
+       ORDER BY o.create_at DESC`,
+      params
+    );
+
+    res.json({
+      data: rows.map(r => ({
+        id: r.id_order,
+        orderNumber: r.order_code,
+        customerName: r.customer_name,
+        customerPhone: r.customer_phone,
+        total: parseFloat(r.total_amount),
+        status: r.status,
+        createdAt: r.create_at,
+        items: [{ serviceName: r.service_name }]
+      })),
+      total: rows.length,
+      page: 1,
+      totalPages: 1
+    });
+  } catch (err) {
+    console.error('List owner orders error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+/** Update order status as an owner */
+export async function updateOrderStatus(req: Request, res: Response) {
+  try {
+    const userId = req.user!.userId;
+    const { idOrder } = req.params;
+    const { status } = req.body;
+
+    // Check ownership: ensure this order contains a service belonging to one of the owner's providers
+    const check = await pool.query(
+      `SELECT o.id_order FROM "order" o
+       JOIN (
+         SELECT id_order, id_item FROM order_tour_detail
+         UNION ALL
+         SELECT id_order, id_item FROM order_ticket_detail
+         UNION ALL
+         SELECT id_order, r.id_item FROM order_accommodations_detail d JOIN accommodations_rooms r ON r.id_room = d.id_room
+         UNION ALL
+         SELECT id_order, v.id_item FROM order_pos_vehicle_detail d JOIN positions p ON p.id_position = d.id_position JOIN vehicle v ON v.id_vehicle = p.id_vehicle
+       ) od ON o.id_order = od.id_order
+       JOIN bookable_items bi ON bi.id_item = od.id_item
+       JOIN provider p ON p.id_provider = bi.id_provider
+       WHERE o.id_order = $1 AND p.id_user = $2`,
+      [idOrder, userId]
+    );
+
+    if (check.rows.length === 0) {
+      return res.status(403).json({ message: 'Bạn không có quyền cập nhật đơn hàng này' });
+    }
+
+    await pool.query('UPDATE "order" SET status = $1, update_at = NOW() WHERE id_order = $2', [status, idOrder]);
+
+    // Log history if table exists (optional, safely ignore if fail or check existence)
+    try {
+      await pool.query('INSERT INTO order_status_history (id_order, from_status, to_status) VALUES ($1, (SELECT status FROM "order" WHERE id_order = $1), $2)', [idOrder, status]);
+    } catch (e) { /* ignore history log errors */ }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update order status error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+/** Get detail for a specific order (owner view) */
+export async function getOrder(req: Request, res: Response) {
+  try {
+    const userId = req.user!.userId;
+    const { idOrder } = req.params;
+
+    // 1. Fetch order and check ownership via service provider
+    const orderRes = await pool.query(
+      `SELECT o.*, 
+              u.full_name as customer_name, u.phone as customer_phone, u.email as customer_email,
+              p.name as provider_name
+       FROM "order" o
+       JOIN (
+         SELECT id_order, id_item FROM order_tour_detail
+         UNION ALL
+         SELECT id_order, id_item FROM order_ticket_detail
+         UNION ALL
+         SELECT id_order, r.id_item FROM order_accommodations_detail d JOIN accommodations_rooms r ON r.id_room = d.id_room
+         UNION ALL
+         SELECT id_order, v.id_item FROM order_pos_vehicle_detail d JOIN positions p ON p.id_position = d.id_position JOIN vehicle v ON v.id_vehicle = p.id_vehicle
+       ) od ON o.id_order = od.id_order
+       JOIN bookable_items bi ON bi.id_item = od.id_item
+       JOIN provider p ON p.id_provider = bi.id_provider
+       JOIN users u ON u.id_user = o.id_user
+       WHERE o.id_order = $1 AND p.id_user = $2`,
+      [idOrder, userId]
+    );
+
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy đơn hàng hoặc bạn không có quyền xem' });
+    }
+
+    const order = orderRes.rows[0];
+    const orderType = order.order_type;
+
+    // 2. Fetch type-specific details
+    let details: any = {};
+    if (orderType === 'tour') {
+      const res = await pool.query(
+        `SELECT d.*, bi.title, bi.price as base_price 
+         FROM order_tour_detail d 
+         JOIN bookable_items bi ON bi.id_item = d.id_item 
+         WHERE d.id_order = $1`,
+        [idOrder]
+      );
+      details = res.rows[0];
+    } else if (orderType === 'accommodation') {
+      const res = await pool.query(
+        `SELECT d.*, r.name_room, bi.title, bi.price as base_price
+         FROM order_accommodations_detail d 
+         JOIN accommodations_rooms r ON r.id_room = d.id_room 
+         JOIN bookable_items bi ON bi.id_item = r.id_item
+         WHERE d.id_order = $1`,
+        [idOrder]
+      );
+      details = res.rows[0];
+    } else if (orderType === 'vehicle') {
+      const res = await pool.query(
+        `SELECT d.*, v.code_vehicle, p.code_position, bi.title, bi.price as base_price
+         FROM order_pos_vehicle_detail d 
+         JOIN positions p ON p.id_position = d.id_position 
+         JOIN vehicle v ON v.id_vehicle = p.id_vehicle
+         JOIN bookable_items bi ON bi.id_item = v.id_item
+         WHERE d.id_order = $1`,
+        [idOrder]
+      );
+      // Since vehicle can have multiple seats in one order, we might need to aggregate?
+      // For now, list all items if multiple, or just take the first if that's how it's handled.
+      // The frontend detail page usually expects one 'details' object or a list.
+      details = res.rows.length > 1 ? { ...res.rows[0], seats: res.rows.map(r => r.code_position) } : res.rows[0];
+    } else if (orderType === 'ticket') {
+      const res = await pool.query(
+        `SELECT d.*, bi.title, bi.price as base_price 
+         FROM order_ticket_detail d 
+         JOIN bookable_items bi ON bi.id_item = d.id_item 
+         WHERE d.id_order = $1`,
+        [idOrder]
+      );
+      details = res.rows[0];
+    }
+
+    // 3. Fetch payments
+    const payments = await pool.query('SELECT * FROM payments WHERE id_order = $1', [idOrder]);
+
+    res.json({
+      data: {
+        order: {
+          ...order,
+          total_amount: parseFloat(order.total_amount),
+          subtotal_amount: parseFloat(order.subtotal_amount),
+          discount_amount: parseFloat(order.discount_amount),
+        },
+        details,
+        payments: payments.rows
+      }
+    });
+  } catch (err) {
+    console.error('Get owner order detail error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}

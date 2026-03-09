@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { ownerApi } from '@/api/owner.api';
 import { PageHeader } from '@/components/PageHeader';
@@ -36,6 +37,7 @@ import { toast } from 'sonner';
 import { Order } from '@/types/dto';
 
 export const OwnerOrders = () => {
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -130,7 +132,10 @@ export const OwnerOrders = () => {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48 p-2 rounded-2xl shadow-xl border-slate-100">
-                        <DropdownMenuItem className="cursor-pointer font-bold py-2.5 rounded-xl flex items-center">
+                        <DropdownMenuItem
+                            className="cursor-pointer font-bold py-2.5 rounded-xl flex items-center"
+                            onClick={() => navigate(`/owner/orders/${order.id}`)}
+                        >
                             <Eye size={16} className="mr-2.5 text-slate-400" /> Chi tiết đơn
                         </DropdownMenuItem>
                         {isConfirmed && (
@@ -244,7 +249,10 @@ export const OwnerOrders = () => {
                                                 <span className="text-slate-300 font-medium mr-0.5">#</span>{order.orderNumber}
                                             </TableCell>
                                             <TableCell className="py-8">
-                                                <div className="flex flex-col gap-1">
+                                                <div
+                                                    className="flex flex-col gap-1 cursor-pointer"
+                                                    onClick={() => navigate(`/owner/orders/${order.id}`)}
+                                                >
                                                     <p className="font-black text-slate-900 group-hover:text-blue-600 transition-colors">{order.customerName}</p>
                                                     <div className="flex items-center text-slate-400 font-bold text-xs">
                                                         <span>{order.customerPhone}</span>

@@ -130,11 +130,11 @@ export const AdminGeography = () => {
   });
   const createAreaMut = useMutation({
     mutationFn: (d: { cityId: string; name: string; attribute?: unknown; status?: string }) => adminGeographyApi.createArea(d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['geography'] }); setCreateOpen(null); setAreaForm({ cityId: '', name: '', attribute: emptyAttribute, status: 'active' }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['geography'] }); setCreateOpen(null); setAreaForm((f) => ({ ...f, name: '', attribute: emptyAttribute, status: 'active' })); },
   });
   const createPoiMut = useMutation({
     mutationFn: (d: { areaId: string; name: string; poiType?: unknown }) => adminGeographyApi.createPoi(d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['geography'] }); setCreateOpen(null); setPoiForm({ areaId: '', name: '', poiType: emptyPoiType }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['geography'] }); setCreateOpen(null); setPoiForm((f) => ({ ...f, name: '', poiType: emptyPoiType })); },
   });
 
   const updateCountryMut = useMutation({
@@ -188,8 +188,8 @@ export const AdminGeography = () => {
               <TabsTrigger value="countries" className="flex items-center gap-2">
                 <Globe className="h-4 w-4" /> Quốc gia ({countries.length})
               </TabsTrigger>
-              <TabsTrigger value="cities">Thành phố</TabsTrigger>
-              <TabsTrigger value="areas">Khu vực</TabsTrigger>
+              <TabsTrigger value="cities">Tỉnh / Thành phố</TabsTrigger>
+              <TabsTrigger value="areas">Phường / Xã</TabsTrigger>
               <TabsTrigger value="pois">Địa điểm POI</TabsTrigger>
             </TabsList>
 
@@ -208,7 +208,7 @@ export const AdminGeography = () => {
                       <TableCell>{c.name ?? '-'}</TableCell>
                       <TableCell>{c.nameVi ?? '-'}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" onClick={() => setEditRow({ type: 'country', id: c.id, row: c })}><Pencil className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setEditRow({ type: 'country', id: c.id, row: c as any })}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteRow({ type: 'country', id: c.id, name: c.name ?? c.code })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </TableCell>
                     </TableRow>
@@ -219,7 +219,7 @@ export const AdminGeography = () => {
 
             <TabsContent value="cities">
               <div className="flex justify-end mt-4">
-                <Button onClick={() => setCreateOpen('city')} disabled={!countries.length}><Plus className="h-4 w-4 mr-2" /> Thêm thành phố</Button>
+                <Button onClick={() => setCreateOpen('city')} disabled={!countries.length}><Plus className="h-4 w-4 mr-2" /> Thêm Tỉnh / Thành phố</Button>
               </div>
               <div className="mb-4">
                 <Label>Lọc theo quốc gia</Label>
@@ -253,7 +253,7 @@ export const AdminGeography = () => {
 
             <TabsContent value="areas">
               <div className="flex justify-end mt-4">
-                <Button onClick={() => setCreateOpen('area')} disabled={!cities.length}><Plus className="h-4 w-4 mr-2" /> Thêm khu vực</Button>
+                <Button onClick={() => setCreateOpen('area')} disabled={!cities.length}><Plus className="h-4 w-4 mr-2" /> Thêm Phường / Xã</Button>
               </div>
               <div className="mb-4 flex gap-4 flex-wrap">
                 <div>
@@ -267,7 +267,7 @@ export const AdminGeography = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>Thành phố</Label>
+                  <Label>Tỉnh / Thành phố</Label>
                   <Select
                     key={`areas-city-${areaForm.countryId}`}
                     value={areaCitySelectValue}
@@ -275,12 +275,12 @@ export const AdminGeography = () => {
                     disabled={!areaForm.countryId}
                   >
                     <SelectTrigger className="w-64">
-                      <SelectValue placeholder="Chọn thành phố" />
+                      <SelectValue placeholder="Chọn Tỉnh / Thành phố" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">Chọn thành phố</SelectItem>
+                      <SelectItem value="__none__">Chọn Tỉnh / Thành phố</SelectItem>
                       {cities.map((c: City) => (
-                        <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                        <SelectItem key={c.id} value={String(c.id)}>{c.nameVi || c.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -288,7 +288,7 @@ export const AdminGeography = () => {
               </div>
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead>Thành phố</TableHead><TableHead>Tên khu vực</TableHead><TableHead>Trạng thái</TableHead><TableHead className="w-24">Thao tác</TableHead></TableRow>
+                  <TableRow><TableHead>Tỉnh / Thành phố</TableHead><TableHead>Tên Phường / Xã</TableHead><TableHead>Trạng thái</TableHead><TableHead className="w-24">Thao tác</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
                   {areas.map((a: Area) => (
@@ -322,33 +322,33 @@ export const AdminGeography = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>Thành phố</Label>
+                  <Label>Tỉnh / Thành phố</Label>
                   <Select
                     key={`pois-city-${poiForm.countryId}`}
                     value={poiCitySelectValue}
                     onValueChange={(v) => setPoiForm((f) => ({ ...f, cityId: v === '__none__' ? '' : v, areaId: '' }))}
                     disabled={!poiForm.countryId}
                   >
-                    <SelectTrigger className="w-64"><SelectValue placeholder="Chọn thành phố" /></SelectTrigger>
+                    <SelectTrigger className="w-64"><SelectValue placeholder="Chọn Tỉnh / Thành phố" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">Chọn thành phố</SelectItem>
+                      <SelectItem value="__none__">Chọn Tỉnh / Thành phố</SelectItem>
                       {cities.map((c: City) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        <SelectItem key={c.id} value={c.id}>{c.nameVi || c.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Khu vực</Label>
+                  <Label>Phường / Xã</Label>
                   <Select
                     key={`pois-area-${poiForm.cityId}`}
                     value={poiAreaSelectValue}
                     onValueChange={(v) => setPoiForm((f) => ({ ...f, areaId: v === '__none__' ? '' : v }))}
                     disabled={!poiForm.cityId}
                   >
-                    <SelectTrigger className="w-64"><SelectValue placeholder="Chọn khu vực" /></SelectTrigger>
+                    <SelectTrigger className="w-64"><SelectValue placeholder="Chọn Phường / Xã" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">Chọn khu vực</SelectItem>
+                      <SelectItem value="__none__">Chọn Phường / Xã</SelectItem>
                       {areas.map((a: Area) => (
                         <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                       ))}
@@ -399,7 +399,7 @@ export const AdminGeography = () => {
       {/* Create City */}
       <Dialog open={createOpen === 'city'} onOpenChange={(o) => !o && setCreateOpen(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Thêm thành phố</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Thêm Tỉnh / Thành phố</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
             <div><Label>Quốc gia</Label>
               <Select value={cityForm.countryId} onValueChange={(v) => setCityForm((f) => ({ ...f, countryId: v }))}>
@@ -422,15 +422,15 @@ export const AdminGeography = () => {
       {/* Create Area */}
       <Dialog open={createOpen === 'area'} onOpenChange={(o) => !o && setCreateOpen(null)}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Thêm khu vực</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Thêm Phường / Xã</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div><Label>Thành phố</Label>
+            <div><Label>Tỉnh / Thành phố</Label>
               <Select value={areaForm.cityId} onValueChange={(v) => setAreaForm((f) => ({ ...f, cityId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Chọn thành phố" /></SelectTrigger>
-                <SelectContent>{cities.map((c: City) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                <SelectTrigger><SelectValue placeholder="Chọn Tỉnh / Thành phố" /></SelectTrigger>
+                <SelectContent>{cities.map((c: City) => <SelectItem key={c.id} value={c.id}>{c.nameVi || c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Tên khu vực</Label><Input value={areaForm.name} onChange={(e) => setAreaForm((f) => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>Tên Phường / Xã</Label><Input value={areaForm.name} onChange={(e) => setAreaForm((f) => ({ ...f, name: e.target.value }))} /></div>
             <div><Label>Attribute (JSON)</Label><textarea className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" value={areaForm.attribute} onChange={(e) => setAreaForm((f) => ({ ...f, attribute: e.target.value }))} /></div>
             <div><Label>Trạng thái</Label>
               <Select value={areaForm.status} onValueChange={(v) => setAreaForm((f) => ({ ...f, status: v }))}>
@@ -521,8 +521,8 @@ export const AdminGeography = () => {
       )}
 
       {editRow?.type === 'area' && (
-        <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)} className="max-w-2xl">
-          <DialogContent>
+        <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)}>
+          <DialogContent className="max-w-2xl">
             <DialogHeader><DialogTitle>Sửa khu vực</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
               <div><Label>Thành phố</Label>
@@ -553,8 +553,8 @@ export const AdminGeography = () => {
       )}
 
       {editRow?.type === 'poi' && (
-        <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)} className="max-w-2xl">
-          <DialogContent>
+        <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)}>
+          <DialogContent className="max-w-2xl">
             <DialogHeader><DialogTitle>Sửa địa điểm POI</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
               <div><Label>Khu vực</Label>
@@ -580,6 +580,7 @@ export const AdminGeography = () => {
 
       <ConfirmDialog
         open={!!deleteRow}
+        onOpenChange={(o) => !o && setDeleteRow(null)}
         title="Xác nhận xóa"
         description={deleteRow ? `Bạn có chắc muốn xóa "${deleteRow.name}"?` : ''}
         onConfirm={() => {
@@ -589,7 +590,6 @@ export const AdminGeography = () => {
           else if (deleteRow.type === 'area') deleteAreaMut.mutate(deleteRow.id);
           else if (deleteRow.type === 'poi') deletePoiMut.mutate(deleteRow.id);
         }}
-        onCancel={() => setDeleteRow(null)}
       />
     </>
   );

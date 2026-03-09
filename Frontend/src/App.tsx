@@ -40,6 +40,7 @@ import OwnerMyProviders from "@/pages/owner/MyProviders";
 import OwnerMyServices from "@/pages/owner/MyServices";
 import OwnerServiceDetail from "@/pages/owner/ServiceDetail";
 import OwnerOrders from "@/pages/owner/Orders";
+import OwnerOrderDetail from "@/pages/owner/OrderDetails";
 import OwnerVouchers from "@/pages/owner/Vouchers";
 import OwnerMessages from "@/pages/owner/Messages";
 import Profile from "@/pages/Profile";
@@ -150,7 +151,7 @@ const App = () => (
                 <Route path="services/:idItem" element={<OwnerServiceDetail />} />
                 <Route path="media" element={<OwnerDashboard />} />
                 <Route path="orders" element={<OwnerOrders />} />
-                <Route path="orders/:id" element={<OwnerOrders />} />
+                <Route path="orders/:id" element={<OwnerOrderDetail />} />
                 <Route path="vouchers" element={<OwnerVouchers />} />
                 <Route path="messages" element={<OwnerMessages />} />
                 <Route path="profile" element={<Profile />} />

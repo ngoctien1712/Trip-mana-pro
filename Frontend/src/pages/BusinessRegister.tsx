@@ -342,14 +342,14 @@ export const BusinessRegister = () => {
                                             </SelectContent>
                                         </Select>
                                         <Select value={cityId} onValueChange={(v) => { setCityId(v); setAreaId(''); }} disabled={!countryId}>
-                                            <SelectTrigger className="h-9"><SelectValue placeholder="Thành phố" /></SelectTrigger>
+                                            <SelectTrigger className="h-9"><SelectValue placeholder="Tỉnh / Thành phố" /></SelectTrigger>
                                             <SelectContent>
-                                                {cities.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                                {cities.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nameVi || c.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <Select value={areaId} onValueChange={setAreaId} disabled={!cityId}>
-                                        <SelectTrigger className="h-9 mt-3"><SelectValue placeholder="Chọn quận/huyện/khu vực" /></SelectTrigger>
+                                        <SelectTrigger className="h-9 mt-3"><SelectValue placeholder="Phường / Xã / Khu vực" /></SelectTrigger>
                                         <SelectContent>
                                             {areas.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                                         </SelectContent>

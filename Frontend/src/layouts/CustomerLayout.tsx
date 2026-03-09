@@ -95,10 +95,7 @@ export const CustomerLayout = () => {
                     <User className="mr-3 h-4 w-4 text-gray-400" />
                     <span className="font-bold text-gray-700">Tài khoản</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/my-orders')} className="rounded-xl py-2 cursor-pointer">
-                    <Package className="mr-3 h-4 w-4 text-gray-400" />
-                    <span className="font-bold text-gray-700">Đơn hàng</span>
-                  </DropdownMenuItem>
+
                   <DropdownMenuItem onClick={() => navigate('/trip-planner')} className="rounded-xl py-2 cursor-pointer">
                     <Compass className="mr-3 h-4 w-4 text-gray-400" />
                     <span className="font-bold text-gray-700">Lập kế hoạch</span>

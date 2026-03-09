@@ -245,7 +245,7 @@ export const Home = () => {
                       </div>
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-xl max-h-[300px]">
-                      <SelectItem value="all" className="font-medium">Tất cả khu vực</SelectItem>
+                      <SelectItem value="all" className="font-medium">Toàn quốc</SelectItem>
                       {provinces.map((p) => (
                         <SelectItem key={p.id} value={p.id} className="font-medium">
                           {p.nameVi || p.name}
@@ -253,7 +253,7 @@ export const Home = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <div className="absolute top-[-10px] left-4 bg-white px-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest z-10">Khu vực</div>
+                  <div className="absolute top-[-10px] left-4 bg-white px-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest z-10">Tỉnh / Thành phố</div>
                 </div>
 
                 <div className="md:col-span-2 relative">

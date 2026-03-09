@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { customerApi } from '@/api/customer.api';
 import { geographyApi } from '@/api/geography.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Compass, Search, MapPin, Star, ArrowRight, Sparkles, Camera, Utensils, Waves, Calendar } from 'lucide-react';
+import { Compass, Search, MapPin, Star, ArrowRight, Sparkles, Camera, Utensils, Waves, Calendar, Receipt } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/utils/format';
 import { ServiceCardSkeleton } from '@/components/LoadingSkeleton';
 
 export const ActivityLanding = () => {
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [selectedDate, setSelectedDate] = useState('');
     const [provinceId, setProvinceId] = useState('');
@@ -75,6 +76,14 @@ export const ActivityLanding = () => {
                     <p className="text-xl opacity-90 font-medium drop-shadow-md mb-8">
                         Tìm kiếm tour, hoạt động giải trí và vé tham quan trên toàn quốc
                     </p>
+                    <div className="flex justify-center mb-12">
+                        <Button
+                            onClick={() => navigate('/my-orders?type=tour')}
+                            className="bg-white/20 hover:bg-white/30 text-white border border-white/30 backdrop-blur-md rounded-2xl px-8 h-14 font-black text-sm uppercase tracking-widest transition-all shadow-2xl"
+                        >
+                            <Receipt className="mr-3 h-5 w-5" /> Đơn hàng của tôi
+                        </Button>
+                    </div>
 
                     <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-4">
                         <div className="md:col-span-5 relative group">
@@ -97,7 +106,7 @@ export const ActivityLanding = () => {
                                 <option value="">Toàn quốc</option>
                                 {provinces.map(p => <option key={p.id} value={p.id}>{p.nameVi || p.name}</option>)}
                             </select>
-                            <div className="absolute top-[-10px] left-8 bg-blue-600 px-2 text-[9px] font-black text-white uppercase tracking-widest rounded-md">Vị trí</div>
+                            <div className="absolute top-[-10px] left-8 bg-blue-600 px-2 text-[9px] font-black text-white uppercase tracking-widest rounded-md">Tỉnh / Thành phố</div>
                         </div>
                         <div className="md:col-span-3 relative group">
                             <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-blue-500" />

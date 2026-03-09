@@ -41,12 +41,9 @@ export const ServiceDetail = () => {
 
     // Address Selection Lists
     const [provinces, setProvinces] = useState<any[]>([]);
-    const [districts, setDistricts] = useState<any[]>([]);
     const [wards, setWards] = useState<any[]>([]);
 
-    const [departureDistricts, setDepartureDistricts] = useState<any[]>([]);
     const [departureWards, setDepartureWards] = useState<any[]>([]);
-    const [arrivalDistricts, setArrivalDistricts] = useState<any[]>([]);
     const [arrivalWards, setArrivalWards] = useState<any[]>([]);
 
     // Queries
@@ -127,71 +124,38 @@ export const ServiceDetail = () => {
         });
     }, []);
 
-    // Fetch Districts (Areas in this system)
+    // Fetch Wards directly from Province
     useEffect(() => {
         if (extraData.provinceId) {
             geographyApi.listAreas(extraData.provinceId).then(res => {
-                setDistricts(res.data);
-            });
-        } else {
-            setDistricts([]);
-        }
-    }, [extraData.provinceId]);
-
-    // Fetch Wards
-    useEffect(() => {
-        if (extraData.districtId) {
-            geographyApi.listWards(extraData.districtId).then(res => {
                 setWards(res.data);
             });
         } else {
             setWards([]);
         }
-    }, [extraData.districtId]);
+    }, [extraData.provinceId]);
 
-    // Fetch Departure Districts
+    // Fetch Departure Wards directly from Province
     useEffect(() => {
         if (extraData.departureProvinceId) {
             geographyApi.listAreas(extraData.departureProvinceId).then(res => {
-                setDepartureDistricts(res.data);
-            });
-        } else {
-            setDepartureDistricts([]);
-        }
-    }, [extraData.departureProvinceId]);
-
-    // Fetch Departure Wards
-    useEffect(() => {
-        if (extraData.departureDistrictId) {
-            geographyApi.listWards(extraData.departureDistrictId).then(res => {
                 setDepartureWards(res.data);
             });
         } else {
             setDepartureWards([]);
         }
-    }, [extraData.departureDistrictId]);
+    }, [extraData.departureProvinceId]);
 
-    // Fetch Arrival Districts
+    // Fetch Arrival Wards directly from Province
     useEffect(() => {
         if (extraData.arrivalProvinceId) {
             geographyApi.listAreas(extraData.arrivalProvinceId).then(res => {
-                setArrivalDistricts(res.data);
-            });
-        } else {
-            setArrivalDistricts([]);
-        }
-    }, [extraData.arrivalProvinceId]);
-
-    // Fetch Arrival Wards
-    useEffect(() => {
-        if (extraData.arrivalDistrictId) {
-            geographyApi.listWards(extraData.arrivalDistrictId).then(res => {
                 setArrivalWards(res.data);
             });
         } else {
             setArrivalWards([]);
         }
-    }, [extraData.arrivalDistrictId]);
+    }, [extraData.arrivalProvinceId]);
 
     // UI States
     const [posCode, setPosCode] = useState('');
@@ -901,44 +865,7 @@ export const ServiceDetail = () => {
                                         </CardContent>
                                     </Card>
 
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between">
-                                            <div><CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> Quản lý các chuyến đi</CardTitle></div>
-                                            <Button size="sm" variant="outline" onClick={() => {
-                                                const departureTime = prompt('Nhập ngày giờ khởi hành (YYYY-MM-DD HH:mm)');
-                                                const arrivalTime = prompt('Nhập ngày giờ đến dự kiến (YYYY-MM-DD HH:mm)');
-                                                if (departureTime) {
-                                                    ownerGeographyApi.addVehicleTrip(service.idVehicle, { departureTime, arrivalTime }).then(() => {
-                                                        queryClient.invalidateQueries({ queryKey: ['owner', 'service-detail', idItem] });
-                                                    });
-                                                }
-                                            }}>+ Thêm chuyến</Button>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="space-y-2">
-                                                {service.trips?.map((trip: any) => (
-                                                    <div key={trip.idTrip} className="p-3 border rounded-lg flex justify-between items-center bg-muted/20">
-                                                        <div>
-                                                            <p className="font-bold text-sm">Khởi hành: {new Date(trip.departureTime).toLocaleString('vi-VN')}</p>
-                                                            <p className="text-xs text-muted-foreground">Đến: {trip.arrivalTime ? new Date(trip.arrivalTime).toLocaleString('vi-VN') : 'N/A'}</p>
-                                                        </div>
-                                                        <Button size="icon" variant="ghost" className="text-red-500" onClick={() => {
-                                                            if (confirm('Xóa chuyến đi này?')) {
-                                                                ownerGeographyApi.deleteVehicleTrip(trip.idTrip).then(() => {
-                                                                    queryClient.invalidateQueries({ queryKey: ['owner', 'service-detail', idItem] });
-                                                                });
-                                                            }
-                                                        }}>
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                ))}
-                                                {(!service.trips || service.trips.length === 0) && (
-                                                    <p className="text-center text-xs text-muted-foreground italic py-4">Chưa có chuyến đi nào được thiết lập.</p>
-                                                )}
-                                            </div>
-                                        </CardContent>
-                                    </Card>
+
 
                                     <Card>
                                         <CardHeader>
@@ -961,22 +888,10 @@ export const ServiceDetail = () => {
                                                     <select
                                                         className="w-full h-10 px-3 rounded-md border border-input bg-background"
                                                         value={extraData.provinceId || ''}
-                                                        onChange={(e) => setExtraData({ ...extraData, provinceId: e.target.value, districtId: '', wardId: '' })}
+                                                        onChange={(e) => setExtraData({ ...extraData, provinceId: e.target.value, wardId: '' })}
                                                     >
                                                         <option value="">Chọn Tỉnh / Thành phố</option>
                                                         {provinces.map(p => <option key={p.id} value={p.id}>{p.nameVi || p.name}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label>Quận / Huyện</Label>
-                                                    <select
-                                                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                                                        value={extraData.districtId || ''}
-                                                        onChange={(e) => setExtraData({ ...extraData, districtId: e.target.value, wardId: '' })}
-                                                        disabled={!extraData.provinceId}
-                                                    >
-                                                        <option value="">Chọn Quận / Huyện</option>
-                                                        {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                                     </select>
                                                 </div>
                                                 <div className="space-y-2">
@@ -985,7 +900,7 @@ export const ServiceDetail = () => {
                                                         className="w-full h-10 px-3 rounded-md border border-input bg-background"
                                                         value={extraData.wardId || ''}
                                                         onChange={(e) => setExtraData({ ...extraData, wardId: e.target.value })}
-                                                        disabled={!extraData.districtId}
+                                                        disabled={!extraData.provinceId}
                                                     >
                                                         <option value="">Chọn Phường / Xã</option>
                                                         {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -1431,22 +1346,10 @@ export const ServiceDetail = () => {
                                                         <select
                                                             className="w-full h-10 px-3 rounded-md border border-input bg-background"
                                                             value={extraData.departureProvinceId || ''}
-                                                            onChange={(e) => setExtraData({ ...extraData, departureProvinceId: e.target.value, departureDistrictId: '', departureWardId: '' })}
+                                                            onChange={(e) => setExtraData({ ...extraData, departureProvinceId: e.target.value, departureWardId: '' })}
                                                         >
                                                             <option value="">Chọn Tỉnh / Thành phố</option>
                                                             {provinces.map(p => <option key={p.id} value={p.id}>{p.nameVi || p.name}</option>)}
-                                                        </select>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>Quận / Huyện đi</Label>
-                                                        <select
-                                                            className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                                                            value={extraData.departureDistrictId || ''}
-                                                            onChange={(e) => setExtraData({ ...extraData, departureDistrictId: e.target.value, departureWardId: '' })}
-                                                            disabled={!extraData.departureProvinceId}
-                                                        >
-                                                            <option value="">Chọn Quận / Huyện</option>
-                                                            {departureDistricts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                                         </select>
                                                     </div>
                                                     <div className="space-y-2">
@@ -1455,7 +1358,7 @@ export const ServiceDetail = () => {
                                                             className="w-full h-10 px-3 rounded-md border border-input bg-background"
                                                             value={extraData.departureWardId || ''}
                                                             onChange={(e) => setExtraData({ ...extraData, departureWardId: e.target.value })}
-                                                            disabled={!extraData.departureDistrictId}
+                                                            disabled={!extraData.departureProvinceId}
                                                         >
                                                             <option value="">Chọn Phường / Xã</option>
                                                             {departureWards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -1496,22 +1399,10 @@ export const ServiceDetail = () => {
                                                         <select
                                                             className="w-full h-10 px-3 rounded-md border border-input bg-background"
                                                             value={extraData.arrivalProvinceId || ''}
-                                                            onChange={(e) => setExtraData({ ...extraData, arrivalProvinceId: e.target.value, arrivalDistrictId: '', arrivalWardId: '' })}
+                                                            onChange={(e) => setExtraData({ ...extraData, arrivalProvinceId: e.target.value, arrivalWardId: '' })}
                                                         >
                                                             <option value="">Chọn Tỉnh / Thành phố</option>
                                                             {provinces.map(p => <option key={p.id} value={p.id}>{p.nameVi || p.name}</option>)}
-                                                        </select>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>Quận / Huyện đến</Label>
-                                                        <select
-                                                            className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                                                            value={extraData.arrivalDistrictId || ''}
-                                                            onChange={(e) => setExtraData({ ...extraData, arrivalDistrictId: e.target.value, arrivalWardId: '' })}
-                                                            disabled={!extraData.arrivalProvinceId}
-                                                        >
-                                                            <option value="">Chọn Quận / Huyện</option>
-                                                            {arrivalDistricts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                                         </select>
                                                     </div>
                                                     <div className="space-y-2">
@@ -1520,7 +1411,7 @@ export const ServiceDetail = () => {
                                                             className="w-full h-10 px-3 rounded-md border border-input bg-background"
                                                             value={extraData.arrivalWardId || ''}
                                                             onChange={(e) => setExtraData({ ...extraData, arrivalWardId: e.target.value })}
-                                                            disabled={!extraData.arrivalDistrictId}
+                                                            disabled={!extraData.arrivalProvinceId}
                                                         >
                                                             <option value="">Chọn Phường / Xã</option>
                                                             {arrivalWards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}

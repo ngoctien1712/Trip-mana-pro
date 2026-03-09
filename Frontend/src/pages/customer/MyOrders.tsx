@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import adLeft from '@/assets/banners/ads-left.jpg';
 import adRight from '@/assets/banners/ads-right.jpg';
-import { useNavigate, Link } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,13 +10,16 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import EmptyState from '@/components/EmptyState';
 import { customerApi } from '@/api/customer.api';
-import { Calendar, Clock, MapPin, Receipt, ChevronRight, CheckCircle2, AlertCircle, Search, Filter, Users, Sparkles } from 'lucide-react';
+import { Calendar, Clock, MapPin, Receipt, ChevronRight, CheckCircle2, Search, Users, Sparkles } from 'lucide-react';
 
 export default function MyOrders() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const typeFilter = searchParams.get('type');
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('upcoming');
 
   const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
   const getImageUrl = (url: string | null) => {
@@ -26,10 +29,14 @@ export default function MyOrders() {
   };
 
   useEffect(() => {
+    if (!typeFilter) {
+      navigate('/', { replace: true });
+      return;
+    }
     const fetchOrders = async () => {
       try {
         setLoading(true);
-        const result = await customerApi.listMyOrders();
+        const result = await customerApi.listMyOrders({ type: typeFilter || undefined });
         setOrders(result.items || []);
       } catch (error) {
         console.error('Lỗi khi lấy danh sách đơn:', error);
@@ -38,7 +45,7 @@ export default function MyOrders() {
       }
     };
     fetchOrders();
-  }, []);
+  }, [typeFilter, navigate]);
 
   const filteredOrders = orders.filter(o =>
     (o.service_name || o.details?.title || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -73,10 +80,10 @@ export default function MyOrders() {
               <Badge className={`border-none font-black text-[10px] uppercase tracking-[0.2em] px-4 py-1.5 rounded-full ${order.status === 'confirmed' ? 'bg-emerald-50 text-emerald-600' :
                 order.status === 'pending' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
                 }`}>
-                {order.order_type || 'DỊCH VỤ'}
+                {order.item_type || order.order_type || 'DỊCH VỤ'}
               </Badge>
               <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest bg-gray-50 px-3 py-1 rounded-lg">
-                #{order.order_code || order.id_order.slice(0, 8)}
+                #{order.order_code || (order.id_order && order.id_order.slice(0, 8))}
               </span>
             </div>
             <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-sm ${order.status === 'confirmed' ? 'bg-emerald-500 text-white' :
@@ -91,8 +98,8 @@ export default function MyOrders() {
             {/* Thumbnail */}
             <div className="hidden lg:block w-32 h-32 rounded-3xl overflow-hidden shrink-0 border border-gray-100 shadow-sm">
               <img
-                src={getImageUrl(order.details?.thumbnail)}
-                alt={order.details?.title}
+                src={getImageUrl(order.details?.thumbnail || order.thumbnail)}
+                alt={order.service_name}
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
             </div>
@@ -142,7 +149,7 @@ export default function MyOrders() {
             </div>
           </div>
           <Button
-            onClick={() => navigate(`/my-orders/${order.id_order}`)}
+            onClick={() => navigate(`/my-orders/${order.id_order}?type=${typeFilter}`)}
             className="w-full h-16 rounded-[1.25rem] bg-gray-900 hover:bg-blue-600 text-white px-10 font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:shadow-blue-200 transition-all group/btn relative z-10 overflow-hidden"
           >
             <span className="relative z-10 flex items-center gap-2">XEM CHI TIẾT <ChevronRight size={16} className="group-hover/btn:translate-x-1 transition-transform" /></span>
@@ -156,33 +163,13 @@ export default function MyOrders() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 relative">
-      {/* Full-height Skyscraper Ads */}
-      <div className="hidden 2xl:block fixed left-4 top-24 bottom-8 w-48 z-0 opacity-40 hover:opacity-100 transition-all">
-        <div className="h-full rounded-[2.5rem] overflow-hidden bg-white shadow-sm border relative">
-          <img src={adLeft} className="w-full h-full object-cover grayscale opacity-80" alt="Lake Ad" />
-          <div className="absolute inset-0 bg-blue-900/30 p-10 flex flex-col justify-end text-white">
-            <h4 className="text-xl font-black uppercase italic italic leading-none mb-2">QUIET LAKE</h4>
-            <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Mountain retreat specials</p>
-          </div>
-        </div>
-      </div>
-      <div className="hidden 2xl:block fixed right-4 top-24 bottom-8 w-48 z-0 opacity-40 hover:opacity-100 transition-all">
-        <div className="h-full rounded-[2.5rem] overflow-hidden bg-white shadow-sm border relative">
-          <img src={adRight} className="w-full h-full object-cover grayscale opacity-80" alt="Adventure Ad" />
-          <div className="absolute inset-0 bg-blue-900/30 p-10 flex flex-col justify-end text-white text-right items-end">
-            <h4 className="text-xl font-black uppercase italic italic leading-none mb-2">WILD EXPLORE</h4>
-            <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Adventure gear deals</p>
-          </div>
-        </div>
-      </div>
-
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="container max-w-5xl px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
               <Receipt size={20} />
             </div>
-            <h1 className="text-xl font-black tracking-tighter text-gray-900 uppercase">Đơn đặt chỗ của tôi</h1>
+            <h1 className="text-xl font-black tracking-tighter text-gray-900 uppercase">Đơn của tôi {typeFilter === 'accommodation' ? '(Khách sạn)' : typeFilter === 'tour' ? '(Hoạt động)' : typeFilter === 'vehicle' ? '(Phương tiện)' : ''}</h1>
           </div>
           <Button variant="outline" onClick={() => navigate('/')} className="rounded-xl font-bold border-gray-200">
             Quay lại Trang chủ
@@ -192,11 +179,10 @@ export default function MyOrders() {
 
       <div className="container max-w-7xl px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-          {/* Main Content: Orders List */}
           <div className="lg:col-span-8 space-y-12">
-            <div className="flex flex-col md:flex-row gap-6 md:items-center justify-between">
-              <Tabs defaultValue="upcoming" className="w-fit">
-                <TabsList className="bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100 flex h-auto">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
+              <div className="flex flex-col md:flex-row gap-6 md:items-center justify-between">
+                <TabsList className="bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100 flex h-auto w-fit">
                   <TabsTrigger
                     value="upcoming"
                     className="rounded-xl px-8 py-2.5 font-black text-[11px] uppercase tracking-widest data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all outline-none"
@@ -210,23 +196,21 @@ export default function MyOrders() {
                     LỊCH SỬ ({pastOrders.length})
                   </TabsTrigger>
                 </TabsList>
-              </Tabs>
 
-              <div className="relative group w-full md:w-80">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={18} />
-                <Input
-                  placeholder="Tìm theo tên dịch vụ, mã đơn..."
-                  className="h-14 pl-12 rounded-2xl bg-white border-none font-bold focus:ring-blue-500 transition-all shadow-sm"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+                <div className="relative group w-full md:w-80">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+                  <Input
+                    placeholder="Tìm theo tên dịch vụ, mã đơn..."
+                    className="h-14 pl-12 rounded-2xl bg-white border-none font-bold focus:ring-blue-500 transition-all shadow-sm"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
 
-            <Tabs defaultValue="upcoming" className="space-y-10">
               <TabsContent value="upcoming" className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-700">
                 {upcomingOrders.length === 0 ? (
-                  <EmptyState title="Không tìm thấy đơn đặt chỗ nào" description="Thử tìm lại hoặc bắt đầu chuyến đi mới của bạn ngay thôi!" />
+                  <EmptyState title="Không tìm thấy đơn đặt chỗ nào" description={`Bạn hiện không có đơn hàng nào sắp tới. ${pastOrders.length > 0 ? 'Hãy kiểm tra mục Lịch sử.' : ''}`} />
                 ) : (
                   upcomingOrders.map(order => <OrderCard key={order.id_order} order={order} />)
                 )}
@@ -234,7 +218,7 @@ export default function MyOrders() {
 
               <TabsContent value="past" className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-700">
                 {pastOrders.length === 0 ? (
-                  <EmptyState title="Bạn chưa có hành trình nào" />
+                  <EmptyState title="Bạn chưa có hành trình nào trong quá khứ" />
                 ) : (
                   pastOrders.map(order => <OrderCard key={order.id_order} order={order} />)
                 )}
@@ -242,7 +226,6 @@ export default function MyOrders() {
             </Tabs>
           </div>
 
-          {/* Sidebar: Recommendations & Ads */}
           <div className="lg:col-span-4 space-y-8">
             <Card className="p-8 rounded-[2.5rem] bg-gradient-to-br from-blue-700 to-indigo-900 text-white border-none shadow-xl relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-20 -mt-20 blur-2xl group-hover:bg-white/20 transition-all duration-700" />
@@ -254,33 +237,6 @@ export default function MyOrders() {
               </div>
             </Card>
 
-            <div className="space-y-6">
-              <div className="flex items-center justify-between px-4">
-                <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">Gợi ý dành cho bạn</h4>
-                <Link to="/" className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline">Xem thêm</Link>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                {[
-                  { title: "Tour Vịnh Hạ Long 2N1Đ", price: "3,500,000", img: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=400" },
-                  { title: "InterContinental Đà Nẵng", price: "7,200,000", img: "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=400" },
-                  { title: "Vé VinWonders Phú Quốc", price: "950,000", img: "https://images.unsplash.com/photo-1589394815804-964ed7be2eb5?w=400" }
-                ].map((item, i) => (
-                  <Card key={i} className="p-4 rounded-[2rem] border-none shadow-sm hover:shadow-md transition-all group cursor-pointer flex gap-4 bg-white">
-                    <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0">
-                      <img src={item.img} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt={item.title} />
-                    </div>
-                    <div className="flex flex-col justify-center gap-1">
-                      <h5 className="font-black text-xs text-gray-900 line-clamp-1 uppercase tracking-tight">{item.title}</h5>
-                      <p className="text-blue-600 font-black text-[10px]">{item.price}đ</p>
-                      <Badge variant="outline" className="w-fit text-[8px] border-emerald-100 text-emerald-500 font-black px-1.5">MỚI</Badge>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-
-            {/* Mobile App QR */}
             <div className="p-8 rounded-[2.5rem] bg-gray-50 border border-gray-100 flex flex-col items-center gap-4 text-center">
               <div className="bg-white p-2 rounded-2xl shadow-sm">
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://travel-pro.vn/app" className="w-24 h-24" alt="QR" />
@@ -293,7 +249,6 @@ export default function MyOrders() {
           </div>
         </div>
       </div>
-
     </div>
   );
 }

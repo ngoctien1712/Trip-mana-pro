@@ -30,6 +30,7 @@ interface ServiceListParams {
 
 interface OrderListParams extends ListParams {
   status?: string;
+  type?: string;
 }
 
 interface BackendHomeData {
@@ -165,8 +166,11 @@ export const customerApi = {
     return res;
   },
 
-  async listMyOrders(_params: OrderListParams = {}): Promise<{ items: any[] }> {
-    const rows = await httpClient.get<any[]>('/customer/orders');
+  async listMyOrders(params: OrderListParams = {}): Promise<{ items: any[] }> {
+    const searchParams = new URLSearchParams();
+    if (params.type) searchParams.set('type', params.type);
+    const query = searchParams.toString();
+    const rows = await httpClient.get<any[]>(`/customer/orders${query ? `?${query}` : ''}`);
     return { items: rows };
   },
 
