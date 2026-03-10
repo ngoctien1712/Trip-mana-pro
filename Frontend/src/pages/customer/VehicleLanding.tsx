@@ -303,7 +303,7 @@ export const VehicleLanding = () => {
             <section className="container max-w-6xl py-10 px-4">
                 <div className="flex items-center justify-between mb-8">
                     <h2 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-                        <Bus className="text-blue-600" /> Tuyến xe phổ biến
+                        <Bus className="text-blue-600" /> Nhà xe phổ biến
                     </h2>
                     <Button variant="ghost" className="text-blue-600 font-bold hover:bg-blue-50 rounded-xl">Xem tất cả</Button>
                 </div>
@@ -326,7 +326,7 @@ export const VehicleLanding = () => {
                                                 )}
                                             </div>
                                             <div>
-                                                <h4 className="font-black text-gray-900 leading-tight">{vehicle.title}</h4>
+                                                <h4 className="font-black text-gray-900 leading-tight">{vehicle.provider_name || vehicle.title}</h4>
                                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
                                                     {vehicle.max_guest || vehicle.attribute?.maxGuest || 45} chỗ • {(vehicle.attribute?.facilities || []).slice(0, 2).join(', ') || 'Ghế ngả'}
                                                 </p>

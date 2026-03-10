@@ -26,6 +26,10 @@ export default function OrderDetail() {
   const [refundData, setRefundData] = useState({ amount: '', reason: '' });
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
     const fetchOrder = async (showLoading = true) => {
       try {
         if (showLoading) setLoading(true);
@@ -305,14 +309,23 @@ export default function OrderDetail() {
                       <h5 className="font-black text-xs uppercase tracking-widest text-gray-500">Thông tin hành khách liên hệ</h5>
                     </div>
                     {(() => {
-                      // Priority: Order details from DB -> LocalStorage (for pending orders)
+                      // Priority: Order details from DB -> User account (fallback) -> LocalStorage (final fallback)
                       const dbGuestInfo = order.details.guest_info || order.details.travelerInfo;
                       let displayInfo = dbGuestInfo;
 
                       if (!dbGuestInfo || !dbGuestInfo.fullName) {
-                        const orderContacts = JSON.parse(localStorage.getItem('order_pending_contacts') || '{}');
-                        if (orderContacts[id!]) {
-                          displayInfo = orderContacts[id!];
+                        // Fallback to the account that placed the order
+                        if (order.user_full_name) {
+                          displayInfo = {
+                            fullName: order.user_full_name,
+                            phone: order.user_phone,
+                            email: order.user_email
+                          };
+                        } else {
+                          const orderContacts = JSON.parse(localStorage.getItem('order_pending_contacts') || '{}');
+                          if (orderContacts[id!]) {
+                            displayInfo = orderContacts[id!];
+                          }
                         }
                       }
 

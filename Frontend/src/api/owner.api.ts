@@ -196,6 +196,10 @@ export const ownerApi = {
     return httpClient.put(`/owner/orders/${id}/status`, { status });
   },
 
+  async releaseRoom(id: string): Promise<any> {
+    return httpClient.post(`/owner/orders/${id}/release-room`, {});
+  },
+
   // Profile
   async getProfile(): Promise<Provider> {
     await delay();

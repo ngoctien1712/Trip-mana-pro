@@ -142,6 +142,7 @@ export const listServices = async (req: Request, res: Response) => {
         v.max_guest,
         v.departure_time,
         v.arrival_time,
+        p_table.name as provider_name,
         (
           SELECT url
           FROM item_media im
@@ -154,6 +155,7 @@ export const listServices = async (req: Request, res: Response) => {
       LEFT JOIN cities c ON a.id_city = c.id_city
       LEFT JOIN accommodations acc ON acc.id_item = bi.id_item
       LEFT JOIN vehicle v ON v.id_item = bi.id_item
+      LEFT JOIN provider p_table ON bi.id_provider = p_table.id_provider
       ${where}
       ORDER BY (COALESCE(bi.attribute->>'group_id', bi.id_item::text)), bi.created_at DESC NULLS LAST, bi.title
       LIMIT 200
@@ -354,19 +356,71 @@ export const getService = async (req: Request, res: Response) => {
       }
     } else if (itemType === 'accommodation') {
       const { rows: accDetails } = await query(
-        'SELECT address, hotel_type, star_rating, checkin_time, checkout_time, policies FROM accommodations WHERE id_item = $1',
+        'SELECT address, hotel_type, star_rating, checkin_time, checkout_time, policies, total_rooms FROM accommodations WHERE id_item = $1',
         [id]
       );
       details = accDetails[0] || {};
       details.acc_attribute = item.attribute; // Map base attribute to acc_attribute for consistency
 
-      // Fetch rooms
+      // 2. Determine date range for availability check
+      const { checkIn, checkOut } = req.query as Record<string, string>;
+      const checkinTime = details.checkin_time || '14:00';
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const [targetHour, targetMinute] = checkinTime.split(':').map(Number);
+
+      const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+      const todayStr = nowLocal.getFullYear() + '-' +
+        String(nowLocal.getMonth() + 1).padStart(2, '0') + '-' +
+        String(nowLocal.getDate()).padStart(2, '0');
+
+      const isBeforeCheckIn = currentHour < targetHour || (currentHour === targetHour && currentMinute < targetMinute);
+
+      const defaultStart = isBeforeCheckIn
+        ? todayStr
+        : (() => {
+          const nextDay = new Date(nowLocal);
+          nextDay.setDate(nextDay.getDate() + 1);
+          return nextDay.getFullYear() + '-' +
+            String(nextDay.getMonth() + 1).padStart(2, '0') + '-' +
+            String(nextDay.getDate()).padStart(2, '0');
+        })();
+
+      const startDate = checkIn || defaultStart;
+      const endDate = checkOut || (() => {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+      })();
+
+      console.log(`[getService] Checking availability for room ${id} from ${startDate} to ${endDate}`);
+      // Fetch rooms and calculate availability
       const { rows: rooms } = await query(
-        'SELECT id_room, name_room, max_guest, price, attribute, media, description FROM accommodations_rooms WHERE id_item = $1 ORDER BY price ASC',
-        [id]
+        `SELECT r.id_room, r.name_room, r.max_guest, r.price, r.attribute, r.media, r.description, r.quantity as total_quantity,
+                COALESCE((
+                  SELECT SUM(d.quantity)
+                  FROM order_accommodations_detail d
+                  JOIN "order" o ON o.id_order = d.id_order
+                  WHERE d.id_room = r.id_room 
+                    AND o.status NOT IN ('cancelled', 'failed')
+                    AND NOT (d.end_date::date <= $2::date OR d.start_date::date >= $3::date)
+                ), 0)::int as booked_quantity
+         FROM accommodations_rooms r 
+         WHERE r.id_item = $1 
+         ORDER BY r.price ASC`,
+        [id, startDate, endDate]
       );
-      // For each room, check availability (simulated for now, would need real booking check)
-      details.rooms = rooms.map(r => ({ ...r, is_available: true }));
+
+      console.log(`[getService] Results:`, rooms.map(r => ({ name: r.name_room, total: r.total_quantity, booked: r.booked_quantity })));
+
+      details.rooms = rooms.map(r => ({
+        ...r,
+        quantity: Math.max(0, r.total_quantity - r.booked_quantity),
+        is_available: (r.total_quantity - r.booked_quantity) > 0,
+        checkInDate: startDate,
+        checkOutDate: endDate
+      }));
     } else if (itemType === 'vehicle') {
       const { rows: vehRows } = await query(
         `SELECT 
@@ -449,6 +503,37 @@ export const createBooking = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Thiếu thông tin dịch vụ' });
     }
 
+    // Validation for past dates
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (item_type === 'tour' && details.booking_date) {
+      const bookingDate = new Date(details.booking_date);
+      if (bookingDate < todayStart) {
+        return res.status(400).json({ message: 'Ngày đặt không hợp lệ (đã qua)' });
+      }
+    } else if (item_type === 'accommodation' && details.start_date) {
+      const checkIn = new Date(details.start_date);
+      if (checkIn < todayStart) {
+        return res.status(400).json({ message: 'Ngày nhận phòng không hợp lệ (đã qua)' });
+      }
+
+      // If check-in is today, check if it's past check-in time
+      if (details.start_date === todayStr) {
+        const { rows: acc } = await query('SELECT checkin_time FROM accommodations WHERE id_item = $1', [id_item]);
+        const checkinTime = acc[0]?.checkin_time || '14:00';
+        const [h, m] = checkinTime.split(':').map(Number);
+        if (now.getHours() > h || (now.getHours() === h && now.getMinutes() >= m)) {
+          return res.status(400).json({ message: 'Đã quá giờ nhận phòng cho ngày hôm nay. Vui lòng chọn ngày khác.' });
+        }
+      }
+
+      if (new Date(details.end_date) <= new Date(details.start_date)) {
+        return res.status(400).json({ message: 'Ngày trả phòng phải sau ngày nhận phòng' });
+      }
+    }
+
     // 1. Fetch base price and provider from bookable_items
     const itemQuery = await query('SELECT price, id_provider FROM bookable_items WHERE id_item = $1', [id_item]);
     if (!itemQuery.rows[0]) {
@@ -493,16 +578,33 @@ export const createBooking = async (req: Request, res: Response) => {
     } else if (item_type === 'accommodation') {
       const { id_room, start_date, end_date, quantity } = details;
       totalItemQuantity = Number(quantity || 1);
-      // Check availability
-      const { rows: booked } = await query(
-        `SELECT 1 FROM order_accommodations_detail d
+
+      // 1. Get total quantity for this room type
+      const { rows: roomType } = await query(
+        'SELECT quantity FROM accommodations_rooms WHERE id_room = $1',
+        [id_room]
+      );
+      if (!roomType[0]) {
+        return res.status(404).json({ message: 'Hạng phòng không tồn tại' });
+      }
+      const maxQuantity = roomType[0].quantity || 1;
+
+      // 2. Check availability across date range
+      const { rows: bookedQuantity } = await query(
+        `SELECT SUM(d.quantity) as total 
+         FROM order_accommodations_detail d
          JOIN "order" o ON o.id_order = d.id_order
-         WHERE d.id_room = $1 AND o.status NOT IN ('cancelled', 'failed') AND NOT (end_date <= $2 OR start_date >= $3)`,
+         WHERE d.id_room = $1 
+           AND o.status NOT IN ('cancelled', 'failed') 
+           AND NOT (d.end_date::date <= $2::date OR d.start_date::date >= $3::date)`,
         [id_room, start_date, end_date]
       );
-      if (booked.length > 0) {
-        return res.status(400).json({ message: 'Phòng đã được đặt trong khoảng thời gian này.' });
+
+      const alreadyBooked = Number(bookedQuantity[0].total || 0);
+      if (alreadyBooked + totalItemQuantity > maxQuantity) {
+        return res.status(400).json({ message: `Xin lỗi, hạng phòng này chỉ còn ${maxQuantity - alreadyBooked} phòng trống trong khoảng thời gian này.` });
       }
+
       const days = Math.ceil((new Date(end_date).getTime() - new Date(start_date).getTime()) / (1000 * 60 * 60 * 24));
       subtotal = price * totalItemQuantity * (days || 1);
     } else if (item_type === 'vehicle') {
@@ -605,7 +707,6 @@ export const createBooking = async (req: Request, res: Response) => {
       }
     }
 
-    // 4. Create Order
     const orderInsert = await query(
       `INSERT INTO "order" (status, order_code, total_amount, currency, order_type, id_user, payment_method, id_voucher, discount_amount, subtotal_amount) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id_order`,
@@ -753,28 +854,48 @@ export const listOrders = async (req: Request, res: Response) => {
     }
 
     const orders = await query(`
-      SELECT o.*, bi.title as service_name, bi.item_type, bi.price as unit_price,
+      SELECT o.id_order, o.status, o.order_code, o.total_amount, o.currency, o.order_type, o.create_at,
+             bi.title as service_name, bi.item_type, bi.price as unit_price,
              a.name as city_name,
-             (SELECT url FROM item_media WHERE id_item = bi.id_item LIMIT 1) as thumbnail
+             (SELECT url FROM item_media WHERE id_item = bi.id_item LIMIT 1) as thumbnail,
+             MIN(od.start_date) as start_date, 
+             MAX(od.end_date) as end_date,
+             SUM(od.quantity) as total_quantity
       FROM "order" o
-      LEFT JOIN (
-        SELECT id_order, id_item FROM order_tour_detail
+      INNER JOIN (
+        SELECT id_order, id_item, booking_date::timestamp as start_date, booking_date::timestamp as end_date, quantity FROM order_tour_detail
         UNION ALL
-        SELECT id_order, id_item FROM order_ticket_detail
+        SELECT id_order, id_item, visit_date::timestamp as start_date, visit_date::timestamp as end_date, quantity FROM order_ticket_detail
         UNION ALL
-        SELECT id_order, r.id_item FROM order_accommodations_detail d JOIN accommodations_rooms r ON r.id_room = d.id_room
+        SELECT id_order, r.id_item, d.start_date::timestamp, d.end_date::timestamp, d.quantity FROM order_accommodations_detail d JOIN accommodations_rooms r ON r.id_room = d.id_room
         UNION ALL
-        SELECT id_order, v.id_item FROM order_pos_vehicle_detail d JOIN positions p ON p.id_position = d.id_position JOIN vehicle v ON v.id_vehicle = p.id_vehicle
+        SELECT d.id_order, v.id_item, 
+               COALESCE(vt.departure_time, (o2.create_at)::timestamp) as start_date,
+               COALESCE(vt.arrival_time, vt.departure_time, (o2.create_at)::timestamp) as end_date,
+               1 as quantity
+        FROM order_pos_vehicle_detail d 
+        JOIN "order" o2 ON o2.id_order = d.id_order
+        JOIN positions p ON p.id_position = d.id_position 
+        JOIN vehicle v ON v.id_vehicle = p.id_vehicle
+        LEFT JOIN vehicle_trips vt ON vt.id_trip = d.id_trip
       ) od ON o.id_order = od.id_order
       LEFT JOIN bookable_items bi ON bi.id_item = od.id_item
       LEFT JOIN area a ON a.id_area = bi.id_area
       ${whereClause}
+      GROUP BY o.id_order, bi.id_item, a.id_area
       ORDER BY o.create_at DESC
     `, params);
 
-    res.json(orders.rows.map((o: any) => ({ ...o, create_at: toIso(o.create_at) })));
+    res.json(orders.rows.map((o: any) => ({
+      ...o,
+      total_amount: parseFloat(o.total_amount),
+      create_at: toIso(o.create_at),
+      start_date: toIso(o.start_date),
+      end_date: toIso(o.end_date),
+      quantity: parseInt(o.total_quantity || '1')
+    })));
   } catch (err) {
-    console.error(err);
+    console.error('List customer orders error:', err);
     res.status(500).json({ message: 'Lỗi khi lấy danh sách đơn' });
   }
 };
@@ -782,7 +903,11 @@ export const listOrders = async (req: Request, res: Response) => {
 export const getOrder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const orderRes = await query(`SELECT * FROM "order" WHERE id_order = $1`, [id]);
+    const orderRes = await query(`
+      SELECT o.*, u.full_name as user_full_name, u.email as user_email, u.phone as user_phone
+      FROM "order" o
+      JOIN users u ON u.id_user = o.id_user
+      WHERE o.id_order = $1`, [id]);
     if (orderRes.rows.length === 0) return res.status(404).json({ message: 'Không tìm thấy đơn' });
 
     const rawOrder = orderRes.rows[0];
@@ -811,7 +936,13 @@ export const getOrder = async (req: Request, res: Response) => {
         JOIN vehicle v ON v.id_vehicle = p.id_vehicle
         JOIN bookable_items bi ON bi.id_item = v.id_item
         WHERE d.id_order = $1`, [id]);
-      details = res.rows[0];
+      if (res.rows.length > 0) {
+        details = {
+          ...res.rows[0],
+          seats: res.rows.map(r => r.code_position),
+          quantity: res.rows.length
+        };
+      }
     } else if (order.order_type === 'ticket') {
       const res = await query(`SELECT d.*, bi.title FROM order_ticket_detail d JOIN bookable_items bi ON bi.id_item = d.id_item WHERE d.id_order = $1`, [id]);
       details = res.rows[0];

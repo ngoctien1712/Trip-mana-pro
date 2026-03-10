@@ -142,5 +142,6 @@ router.post(
 router.get('/orders', ownerController.listOrders);
 router.get('/orders/:idOrder', ownerController.getOrder);
 router.put('/orders/:idOrder/status', ownerController.updateOrderStatus);
+router.post('/orders/:idOrder/release-room', ownerController.releaseRoom);
 
 export default router;

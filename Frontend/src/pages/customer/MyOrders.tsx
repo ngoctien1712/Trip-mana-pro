@@ -52,19 +52,20 @@ export default function MyOrders() {
     (o.order_code || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const now = new Date();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   // Logic to split orders: Upcoming vs Past
   const upcomingOrders = filteredOrders.filter(order => {
-    if (order.status === 'cancelled') return false;
-    const serviceDate = order.details?.start_date || order.details?.booking_date || order.details?.visit_date || order.create_at;
-    return new Date(serviceDate) >= now;
+    if (['cancelled', 'completed', 'refunded', 'failed'].includes(order.status)) return false;
+    const serviceEndDate = order.end_date || order.start_date || order.create_at;
+    return new Date(serviceEndDate) >= today;
   });
 
   const pastOrders = filteredOrders.filter(order => {
-    if (order.status === 'cancelled') return true;
-    const serviceDate = order.details?.start_date || order.details?.booking_date || order.details?.visit_date || order.create_at;
-    return new Date(serviceDate) < now;
+    if (['cancelled', 'completed', 'refunded', 'failed'].includes(order.status)) return true;
+    const serviceEndDate = order.end_date || order.start_date || order.create_at;
+    return new Date(serviceEndDate) < today;
   });
 
   const OrderCard = ({ order }: { order: any }) => (
@@ -95,10 +96,9 @@ export default function MyOrders() {
           </div>
 
           <div className="flex gap-8">
-            {/* Thumbnail */}
             <div className="hidden lg:block w-32 h-32 rounded-3xl overflow-hidden shrink-0 border border-gray-100 shadow-sm">
               <img
-                src={getImageUrl(order.details?.thumbnail || order.thumbnail)}
+                src={getImageUrl(order.thumbnail)}
                 alt={order.service_name}
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
@@ -106,7 +106,7 @@ export default function MyOrders() {
 
             <div className="flex-1">
               <h3 className="text-2xl font-black text-gray-900 mb-6 group-hover:text-blue-600 transition-colors leading-[1.1] tracking-tight">
-                {order.service_name || order.details?.title || 'Dịch vụ đã đặt'}
+                {order.service_name || 'Dịch vụ đã đặt'}
               </h3>
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-8 pt-6 border-t border-gray-50">
@@ -114,21 +114,26 @@ export default function MyOrders() {
                   <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Thời gian</p>
                   <div className="flex items-center gap-2 text-gray-700 text-sm font-black">
                     <Calendar className="text-blue-500" size={14} />
-                    <span>{new Date(order.details?.start_date || order.details?.booking_date || order.create_at).toLocaleDateString('vi-VN')}</span>
+                    <span className="truncate">
+                      {order.order_type === 'accommodation' && order.start_date && order.end_date
+                        ? `${new Date(order.start_date).toLocaleDateString('vi-VN')} - ${new Date(order.end_date).toLocaleDateString('vi-VN')}`
+                        : new Date(order.start_date || order.create_at).toLocaleDateString('vi-VN')
+                      }
+                    </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Địa điểm</p>
                   <div className="flex items-center gap-2 text-gray-700 text-sm font-black">
                     <MapPin className="text-blue-500" size={14} />
-                    <span className="truncate">{order.city_name || order.details?.city_name || 'Hà Nội'}</span>
+                    <span className="truncate">{order.city_name || 'Hà Nội'}</span>
                   </div>
                 </div>
                 <div className="space-y-1 hidden md:block">
                   <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Số lượng</p>
                   <div className="flex items-center gap-2 text-gray-700 text-sm font-black">
                     <Users className="text-blue-500" size={14} />
-                    <span>{order.details?.quantity || 1} {order.order_type === 'accommodation' ? 'phòng' : 'khách'}</span>
+                    <span>{order.quantity || 1} {order.order_type === 'accommodation' ? 'phòng' : 'khách'}</span>
                   </div>
                 </div>
               </div>

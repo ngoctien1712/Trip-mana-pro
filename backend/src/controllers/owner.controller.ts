@@ -183,13 +183,13 @@ export async function getServiceDetail(req: Request, res: Response) {
     } else if (itemType === 'accommodation') {
       const { rows } = await pool.query(
         `SELECT id_item, address, hotel_type, star_rating, checkin_time, checkout_time, policies, attribute,
-                phone_number, province_id, district_id, ward_id, specific_address
+                phone_number, province_id, district_id, ward_id, specific_address, total_rooms
          FROM accommodations WHERE id_item = $1`,
         [idItem]
       );
       details = rows[0] ? toCamel(rows[0] as Record<string, unknown>) : {};
       // Also fetch rooms for accommodation
-      const { rows: rooms } = await pool.query('SELECT id_room, name_room, max_guest, price, attribute, media, description FROM accommodations_rooms WHERE id_item = $1 ORDER BY price ASC', [idItem]);
+      const { rows: rooms } = await pool.query('SELECT id_room, name_room, max_guest, price, attribute, media, description, quantity FROM accommodations_rooms WHERE id_item = $1 ORDER BY price ASC', [idItem]);
       details.rooms = rooms.map(r => toCamel(r as Record<string, unknown>));
     } else if (itemType === 'vehicle') {
       const { rows } = await pool.query(
@@ -337,12 +337,25 @@ export async function updateServiceDetail(req: Request, res: Response) {
         );
       }
     } else if (itemType === 'accommodation' && extraData) {
+      const { totalRooms } = extraData;
+      const { rows: sumRows } = await client.query(
+        'SELECT SUM(quantity) as total FROM accommodations_rooms WHERE id_item = $1',
+        [idItem]
+      );
+      const currentSum = Number(sumRows[0].total || 0);
+      if (Number(totalRooms) < currentSum) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          message: `Tổng số phòng (${totalRooms}) không được nhỏ hơn tổng số lượng phòng của các hạng phòng hiện có (${currentSum}). Vui lòng giảm số lượng phòng ở từng hạng phòng trước khi giảm tổng số phòng.`
+        });
+      }
+
       await client.query(
         `INSERT INTO accommodations (
           id_item, address, hotel_type, star_rating, checkin_time, checkout_time, policies, 
-          attribute, phone_number, province_id, district_id, ward_id, specific_address
+          attribute, phone_number, province_id, district_id, ward_id, specific_address, total_rooms
         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          ON CONFLICT (id_item) DO UPDATE 
          SET address = EXCLUDED.address,
              hotel_type = EXCLUDED.hotel_type,
@@ -355,7 +368,8 @@ export async function updateServiceDetail(req: Request, res: Response) {
              province_id = EXCLUDED.province_id,
              district_id = EXCLUDED.district_id,
              ward_id = EXCLUDED.ward_id,
-             specific_address = EXCLUDED.specific_address`,
+             specific_address = EXCLUDED.specific_address,
+             total_rooms = EXCLUDED.total_rooms`,
         [
           idItem,
           extraData.address || '',
@@ -369,7 +383,8 @@ export async function updateServiceDetail(req: Request, res: Response) {
           extraData.provinceId || null,
           extraData.districtId || null,
           extraData.wardId || null,
-          extraData.specificAddress || null
+          extraData.specificAddress || null,
+          Number(extraData.totalRooms) || 0
         ]
       );
     } else if (itemType === 'ticket' && extraData) {
@@ -750,11 +765,11 @@ export async function addAccommodationRoom(req: Request, res: Response) {
   try {
     const userId = req.user!.userId;
     const { idItem } = req.params;
-    const { nameRoom, maxGuest, attribute, price, media, description } = req.body;
+    const { nameRoom, maxGuest, attribute, price, media, description, quantity } = req.body;
 
-    // Check if accommodation belongs to user
+    // Check if accommodation belongs to user and get total_rooms
     const check = await pool.query(
-      `SELECT a.id_item FROM accommodations a
+      `SELECT a.id_item, a.total_rooms FROM accommodations a
        JOIN bookable_items bi ON bi.id_item = a.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
        WHERE a.id_item = $1 AND p.id_user = $2`,
@@ -765,11 +780,28 @@ export async function addAccommodationRoom(req: Request, res: Response) {
       return res.status(403).json({ message: 'Bạn không có quyền quản lý dịch vụ này' });
     }
 
+    const { total_rooms } = check.rows[0];
+
+    // Check sum of room quantities
+    const { rows: sumRows } = await pool.query(
+      'SELECT SUM(quantity) as total FROM accommodations_rooms WHERE id_item = $1',
+      [idItem]
+    );
+    const currentSum = Number(sumRows[0].total || 0);
+
+    const roomQuantity = quantity === undefined ? 1 : Number(quantity);
+
+    if (currentSum + roomQuantity > total_rooms) {
+      return res.status(400).json({
+        message: `Tổng số lượng phòng vượt quá giới hạn của khách sạn (${total_rooms} phòng). Hiện đã có ${currentSum} phòng. Bạn chỉ có thể thêm tối đa ${total_rooms - currentSum} phòng.`
+      });
+    }
+
     const { rows } = await pool.query(
-      `INSERT INTO accommodations_rooms (id_item, name_room, max_guest, attribute, price, media, description)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id_room, id_item, name_room, max_guest, attribute, price, media, description`,
-      [idItem, nameRoom, maxGuest, attribute ? JSON.stringify(attribute) : null, price, media ? JSON.stringify(media) : '[]', description]
+      `INSERT INTO accommodations_rooms (id_item, name_room, max_guest, attribute, price, media, description, quantity)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id_room, id_item, name_room, max_guest, attribute, price, media, description, quantity`,
+      [idItem, nameRoom, maxGuest, attribute ? JSON.stringify(attribute) : null, price, media ? JSON.stringify(media) : '[]', description, roomQuantity]
     );
 
     res.status(201).json(toCamel(rows[0] as Record<string, unknown>));
@@ -784,10 +816,11 @@ export async function updateAccommodationRoom(req: Request, res: Response) {
   try {
     const userId = req.user!.userId;
     const { idRoom } = req.params;
-    const { nameRoom, maxGuest, attribute, price, media, description } = req.body;
+    const { nameRoom, maxGuest, attribute, price, media, description, quantity } = req.body;
 
     const check = await pool.query(
-      `SELECT r.id_room FROM accommodations_rooms r
+      `SELECT r.id_room, r.id_item, a.total_rooms FROM accommodations_rooms r
+       JOIN accommodations a ON a.id_item = r.id_item
        JOIN bookable_items bi ON bi.id_item = r.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
        WHERE r.id_room = $1 AND p.id_user = $2`,
@@ -798,12 +831,29 @@ export async function updateAccommodationRoom(req: Request, res: Response) {
       return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa phòng này' });
     }
 
+    const { id_item, total_rooms } = check.rows[0];
+
+    // Check sum of room quantities excluding current room
+    const { rows: sumRows } = await pool.query(
+      'SELECT SUM(quantity) as total FROM accommodations_rooms WHERE id_item = $1 AND id_room != $2',
+      [id_item, idRoom]
+    );
+    const otherRoomsSum = Number(sumRows[0].total || 0);
+
+    const roomQuantity = quantity === undefined ? 1 : Number(quantity);
+
+    if (otherRoomsSum + roomQuantity > total_rooms) {
+      return res.status(400).json({
+        message: `Tổng số lượng phòng vượt quá giới hạn của khách sạn (${total_rooms} phòng). Các hạng phòng khác đã chiếm ${otherRoomsSum} phòng. Bạn chỉ có thể đặt tối đa ${total_rooms - otherRoomsSum} phòng cho hạng này.`
+      });
+    }
+
     const { rows } = await pool.query(
       `UPDATE accommodations_rooms 
-       SET name_room = $1, max_guest = $2, attribute = $3, price = $4, media = $5, description = $6
+       SET name_room = $1, max_guest = $2, attribute = $3, price = $4, media = $5, description = $6, quantity = $8
        WHERE id_room = $7
        RETURNING *`,
-      [nameRoom, maxGuest, attribute ? JSON.stringify(attribute) : null, price, media ? JSON.stringify(media) : '[]', description, idRoom]
+      [nameRoom, maxGuest, attribute ? JSON.stringify(attribute) : null, price, media ? JSON.stringify(media) : '[]', description, idRoom, roomQuantity]
     );
 
     res.json(toCamel(rows[0] as Record<string, unknown>));
@@ -1224,8 +1274,8 @@ export async function listOrders(req: Request, res: Response) {
     const { rows } = await pool.query(
       `SELECT o.id_order, o.order_code, o.total_amount, o.status, o.create_at, o.currency,
               u.full_name as customer_name, u.phone as customer_phone,
-              bi.title as service_name, bi.item_type,
-              p.name as provider_name
+              STRING_AGG(DISTINCT bi.title, ', ') as service_names,
+              COUNT(od.id_item) as item_count
        FROM "order" o
        JOIN (
          SELECT id_order, id_item FROM order_tour_detail
@@ -1240,6 +1290,7 @@ export async function listOrders(req: Request, res: Response) {
        JOIN provider p ON p.id_provider = bi.id_provider
        JOIN users u ON u.id_user = o.id_user
        ${whereClause}
+       GROUP BY o.id_order, u.id_user
        ORDER BY o.create_at DESC`,
       params
     );
@@ -1253,7 +1304,7 @@ export async function listOrders(req: Request, res: Response) {
         total: parseFloat(r.total_amount),
         status: r.status,
         createdAt: r.create_at,
-        items: [{ serviceName: r.service_name }]
+        items: [{ serviceName: r.service_names, count: parseInt(r.item_count) }]
       })),
       total: rows.length,
       page: 1,
@@ -1262,6 +1313,57 @@ export async function listOrders(req: Request, res: Response) {
   } catch (err) {
     console.error('List owner orders error:', err);
     res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+/** Release a room (check out early) */
+export async function releaseRoom(req: Request, res: Response) {
+  const client = await pool.connect();
+  try {
+    const userId = req.user!.userId;
+    const { idOrder } = req.params;
+
+    // 1. Ownership check
+    const check = await client.query(
+      `SELECT o.id_order FROM "order" o
+       JOIN order_accommodations_detail d ON o.id_order = d.id_order
+       JOIN accommodations_rooms r ON r.id_room = d.id_room
+       JOIN bookable_items bi ON bi.id_item = r.id_item
+       JOIN provider p ON p.id_provider = bi.id_provider
+       WHERE o.id_order = $1 AND p.id_user = $2`,
+      [idOrder, userId]
+    );
+
+    if (check.rows.length === 0) {
+      return res.status(403).json({ message: 'Bạn không có quyền thực hiện hành động này hoặc đây không phải đơn phòng' });
+    }
+
+    await client.query('BEGIN');
+
+    // 2. Update end_date to current_date in local timezone
+    await client.query(
+      `UPDATE order_accommodations_detail 
+       SET end_date = (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date 
+       WHERE id_order = $1`,
+      [idOrder]
+    );
+
+    // 3. Move status to completed if it was active
+    await client.query(
+      `UPDATE "order" 
+       SET status = 'completed' 
+       WHERE id_order = $1 AND status IN ('confirmed', 'processing')`,
+      [idOrder]
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Giải phóng phòng thành công' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Release room error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  } finally {
+    client.release();
   }
 }
 
@@ -1274,7 +1376,7 @@ export async function updateOrderStatus(req: Request, res: Response) {
 
     // Check ownership: ensure this order contains a service belonging to one of the owner's providers
     const check = await pool.query(
-      `SELECT o.id_order FROM "order" o
+      `SELECT o.id_order, o.status FROM "order" o
        JOIN (
          SELECT id_order, id_item FROM order_tour_detail
          UNION ALL
@@ -1294,11 +1396,18 @@ export async function updateOrderStatus(req: Request, res: Response) {
       return res.status(403).json({ message: 'Bạn không có quyền cập nhật đơn hàng này' });
     }
 
-    await pool.query('UPDATE "order" SET status = $1, update_at = NOW() WHERE id_order = $2', [status, idOrder]);
+    const currentStatus = check.rows[0].status;
 
-    // Log history if table exists (optional, safely ignore if fail or check existence)
+    // Execute update
+    const result = await pool.query('UPDATE "order" SET status = $1 WHERE id_order = $2', [status, idOrder]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Không thể cập nhật trạng thái đơn hàng' });
+    }
+
+    // Log history
     try {
-      await pool.query('INSERT INTO order_status_history (id_order, from_status, to_status) VALUES ($1, (SELECT status FROM "order" WHERE id_order = $1), $2)', [idOrder, status]);
+      await pool.query('INSERT INTO order_status_history (id_order, from_status, to_status) VALUES ($1, $2, $3)', [idOrder, currentStatus, status]);
     } catch (e) { /* ignore history log errors */ }
 
     res.json({ success: true });

@@ -35,6 +35,12 @@ import {
   MessageCircle,
   Armchair
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import ChatWidget from '@/components/chat/ChatWidget';
 
 interface ServiceDetail {
@@ -112,6 +118,7 @@ interface ServiceDetail {
     attribute: any;
     media?: any[];
     description?: string;
+    quantity?: number;
   }>;
   positions?: Array<{
     id_position: string;
@@ -177,6 +184,41 @@ export default function ServiceDetail() {
   const [bookingDate, setBookingDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [relatedServices, setRelatedServices] = useState<any[]>([]);
+  const [showRoomDetail, setShowRoomDetail] = useState(false);
+  const [previewRoom, setPreviewRoom] = useState<any | null>(null);
+
+  // Dates for accommodation - Handle "today if before check-in" rule
+  const getDefaultDates = () => {
+    const now = new Date();
+    // Correct local YYYY-MM-DD
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
+    const checkinTime = service?.checkin_time || '14:00';
+    const [h, m] = checkinTime.split(':').map(Number);
+
+    // Check if we can still check in today (local time)
+    const canCheckInToday = now.getHours() < h || (now.getHours() === h && now.getMinutes() < m);
+
+    const start = canCheckInToday
+      ? todayStr
+      : new Date(now.getTime() + 86400000).toISOString().split('T')[0];
+
+    const startDateObj = new Date(start);
+    const end = new Date(startDateObj.getTime() + 86400000).toISOString().split('T')[0];
+
+    return {
+      start: start,
+      end: end,
+      min: canCheckInToday ? todayStr : new Date(now.getTime() + 86400000).toISOString().split('T')[0]
+    };
+  };
+
+  const defaults = getDefaultDates();
+  const [checkInDate, setCheckInDate] = useState<string>(defaults.start);
+  const [checkOutDate, setCheckOutDate] = useState<string>(defaults.end);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [stickyStyle, setStickyStyle] = useState<React.CSSProperties>({ position: 'sticky', top: '96px' });
 
@@ -227,7 +269,7 @@ export default function ServiceDetail() {
       }
 
       const [data, vData] = await Promise.all([
-        customerApi.getServiceDetail(serviceId),
+        customerApi.getServiceDetail(serviceId, { checkIn: checkInDate, checkOut: checkOutDate }),
         customerApi.getApplicableVouchers(serviceId)
       ]);
 
@@ -269,15 +311,38 @@ export default function ServiceDetail() {
   };
 
   useEffect(() => {
-    // Chỉ fetch lại nếu id thực sự khác id hiện tại của service (tránh gọi dư thừa khi quay lại trang)
-    if (id && (!service || service.id_item !== id)) {
+    if (id) {
       loadService(id);
     }
-  }, [id]);
+  }, [id, checkInDate, checkOutDate]);
 
   // No need to fetch booked seats here anymore as it is done in BookingPage.tsx
 
   const handleBookingRedirect = () => {
+    // 1. Validation for past dates
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const checkinDateObj = new Date(checkInDate);
+    const todayObj = new Date();
+    todayObj.setHours(0, 0, 0, 0);
+
+    if (service.item_type === 'accommodation') {
+      if (checkinDateObj < todayObj) {
+        alert('Ngày nhận phòng không hợp lệ (đã qua). Vui lòng chọn ngày khác ở phần chọn ngày.');
+        return;
+      }
+
+      // If it's today, check the time
+      if (checkInDate === todayStr) {
+        const checkinTime = service.checkin_time || '14:00';
+        const [h, m] = checkinTime.split(':').map(Number);
+        if (now.getHours() > h || (now.getHours() === h && now.getMinutes() >= m)) {
+          alert('Đã quá giờ nhận phòng cho ngày hôm nay. Vui lòng chọn ngày khác.');
+          return;
+        }
+      }
+    }
+
     if (service.item_type === 'tour' && service.remaining_slots !== undefined && quantity > service.remaining_slots) {
       alert(`Xin lỗi, chỉ còn ${service.remaining_slots} chỗ trống.`);
       return;
@@ -285,7 +350,7 @@ export default function ServiceDetail() {
 
     let query = `?quantity=${quantity}`;
     if (service.item_type === 'accommodation' && selectedRoom) {
-      query += `&id_room=${selectedRoom.id_room}`;
+      query += `&id_room=${selectedRoom.id_room}&start_date=${checkInDate}&end_date=${checkOutDate}`;
     } else if (service.item_type === 'vehicle') {
       if (selectedTrip) query += `&id_trip=${selectedTrip.id_trip}`;
     } else if (service.item_type === 'tour') {
@@ -708,114 +773,140 @@ export default function ServiceDetail() {
                 </section>
 
                 <section className="space-y-12">
-                  <div className="flex items-center gap-4">
-                    <div className="w-2 h-10 bg-[#0094FF] rounded-full" />
-                    <h2 className="text-3xl font-black text-[#1A2B48] uppercase tracking-tighter">Hạng phòng hiện có</h2>
+                  <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-2 h-10 bg-[#0094FF] rounded-full" />
+                      <h2 className="text-3xl font-black text-[#1A2B48] uppercase tracking-tighter">Hạng phòng hiện có</h2>
+                    </div>
                   </div>
 
                   <div className="space-y-10">
                     {service.rooms?.map((room) => {
                       const isSelected = selectedRoom?.id_room === room.id_room;
-                      const roomSize = room.attribute?.room_size || '32.0 m²';
                       const facilities = room.attribute?.facilities || [];
+                      const backendFacilities: string[] = Array.isArray(room.attribute?.amenities) ? room.attribute.amenities : [];
+                      const allFacilities = [...new Set([...facilities, ...backendFacilities])];
 
                       return (
                         <div
                           key={room.id_room}
-                          className={`bg-white rounded-[1.5rem] border border-gray-200 overflow-hidden transition-all duration-300 shadow-sm ${isSelected ? 'ring-4 ring-blue-100 border-blue-400' : 'hover:shadow-md'
+                          className={`bg-white rounded-[2.5rem] border border-gray-100 overflow-hidden transition-all duration-300 shadow-sm hover:shadow-xl hover:shadow-blue-500/5 ${isSelected ? 'ring-4 ring-blue-500/20 border-blue-200' : ''
                             }`}
                         >
-                          {/* Header: Room Name */}
-                          <div className="bg-[#EBF5FF] px-8 py-5 border-b border-gray-100">
-                            <h4 className="text-xl font-black text-[#1A2B48]">{room.name_room}</h4>
+                          <div className="bg-[#f0f7ff] px-10 py-6 border-b border-gray-50">
+                            <h4 className="text-2xl font-black text-[#1A2B48] tracking-tight">{room.name_room}</h4>
                           </div>
 
-                          <div className="flex flex-col lg:flex-row p-0">
-                            {/* Left: Image and Features */}
-                            <div className="lg:w-1/4 p-8 border-r border-gray-100 bg-white">
-                              <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-inner mb-6">
-                                <img
-                                  src={getImageUrl(room.media?.[0]?.url || room.attribute?.images?.[0])}
-                                  className="w-full h-full object-cover"
-                                  alt={room.name_room}
-                                />
+                          <div className="flex flex-col lg:flex-row">
+                            {/* Left: Metadata */}
+                            <div className="lg:w-1/4 p-8 border-r border-gray-50 flex flex-col justify-between">
+                              <div>
+                                <div className="aspect-[4/3] rounded-3xl overflow-hidden shadow-inner mb-6 ring-1 ring-gray-100">
+                                  <img
+                                    src={getImageUrl(room.media?.[0]?.url || (room.media?.[0] as any))}
+                                    className="w-full h-full object-cover"
+                                    alt={room.name_room}
+                                  />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="flex items-center gap-2 text-gray-500">
+                                    <Sparkles size={16} className="text-gray-400" />
+                                    <span className="text-[11px] font-bold text-gray-600">{room.attribute?.room_size || '32.0 m²'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-gray-500">
+                                    <Phone size={16} className="text-gray-400" />
+                                    <span className="text-[11px] font-bold text-gray-600">Vòi tắm đứng</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-gray-500">
+                                    <CloudSun size={16} className="text-gray-400" />
+                                    <span className="text-[11px] font-bold text-gray-600">Máy lạnh</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-gray-500">
+                                    <MessageCircle size={16} className="text-gray-400" />
+                                    <span className="text-[11px] font-bold text-gray-600">WiFi miễn phí</span>
+                                  </div>
+                                </div>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-y-4 mb-6">
-                                <div className="flex items-center gap-3 text-gray-500">
-                                  <Sparkles size={18} className="text-gray-400" />
-                                  <span className="text-xs font-bold leading-none">{roomSize}</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-gray-500">
-                                  <MessageCircle size={18} className="text-gray-400" />
-                                  <span className="text-xs font-bold leading-none">Vòi tắm đứng</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-gray-500">
-                                  <CloudSun size={18} className="text-gray-400" />
-                                  <span className="text-xs font-bold leading-none">Máy lạnh</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-gray-500">
-                                  <ExternalLink size={18} className="text-gray-400" />
-                                  <span className="text-xs font-bold leading-none">WiFi miễn phí</span>
-                                </div>
-                              </div>
-
-                              <button className="text-[#0094FF] font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:underline">
-                                <Eye size={16} /> Xem chi tiết phòng
+                              <button
+                                onClick={() => {
+                                  setPreviewRoom(room);
+                                  setShowRoomDetail(true);
+                                }}
+                                className="mt-8 flex items-center gap-2 text-blue-600 text-[10px] font-black uppercase tracking-widest hover:text-blue-700 transition-colors w-fit group"
+                              >
+                                <Eye size={16} className="group-hover:scale-110 transition-transform" />
+                                XEM CHI TIẾT PHÒNG
                               </button>
                             </div>
 
-                            {/* Right: Options Table */}
-                            <div className="flex-1 flex flex-col">
-                              {/* Table Headers */}
-                              <div className="grid grid-cols-12 bg-[#F7F9FB] border-b border-gray-100 px-6 py-4 text-[11px] font-black uppercase tracking-widest text-gray-500">
-                                <div className="col-span-4 font-black text-[#1A2B48]">Lựa chọn phòng</div>
-                                <div className="col-span-1 text-center">Khách</div>
-                                <div className="col-span-4 text-right pr-12">Giá/phòng/đêm</div>
-                                <div className="col-span-3 text-center">Thao tác</div>
+                            {/* Middle: Selection Table */}
+                            <div className="lg:w-3/4">
+                              <div className="grid grid-cols-4 gap-4 px-10 py-5 bg-[#fcfdfe] border-b border-gray-50">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Lựa chọn phòng</span>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Khách</span>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Giá/phòng/đêm</span>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Thao tác</span>
                               </div>
 
-                              {/* Table Row */}
-                              <div className="grid grid-cols-12 flex-1 items-center px-6 py-8 divide-x divide-gray-50">
-                                <div className="col-span-4 pr-8 space-y-3">
-                                  <p className="text-[10px] font-bold text-gray-400 leading-tight">Deluxe Room - Breakfast Included</p>
-                                  <h5 className="text-base font-black text-[#1A2B48]">Bữa sáng cho {room.max_guest} người</h5>
-                                  <div className="space-y-1.5 pt-1">
-                                    <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-                                      <Armchair size={14} /> 1 giường đôi
+                              <div className="p-10 flex items-center justify-between">
+                                <div className="space-y-4">
+                                  <div>
+                                    <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1 italic opacity-60">Deluxe Room - Breakfast Included</p>
+                                    <h5 className="text-xl font-black text-[#1A2B48] flex items-center gap-2">
+                                      Bữa sáng cho 2 người
+                                    </h5>
+                                  </div>
+                                  <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2 text-gray-500">
+                                      <Armchair size={16} />
+                                      <span className="text-sm font-bold text-gray-500">1 giường đôi</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-xs font-bold text-emerald-600">
-                                      <CheckCircle2 size={14} /> Miễn phí hủy phòng
+                                    <div className="flex items-center gap-2 text-emerald-600">
+                                      <CheckCircle2 size={16} />
+                                      <span className="text-sm font-bold">Miễn phí hủy phòng</span>
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="col-span-1 px-2 flex justify-center items-center gap-0.5">
-                                  {Array.from({ length: room.max_guest }).map((_, i) => (
-                                    <User key={i} size={16} className="text-gray-400" />
-                                  ))}
+                                <div className="flex items-center gap-2 text-gray-400">
+                                  <Users size={20} />
+                                  <span className="font-bold">x{room.max_guest}</span>
                                 </div>
 
-                                <div className="col-span-4 px-6 text-right space-y-1 pr-12">
-                                  <p className="text-[11px] font-bold text-gray-400 line-through">{(room.price * 1.2).toLocaleString()}đ</p>
-                                  <p className="text-xl font-black text-[#FF5E1F] tracking-tighter">{(room.price).toLocaleString()}đ</p>
-                                  <p className="text-[9px] font-bold text-gray-400">Chưa bao gồm thuế và phí</p>
+                                <div className="text-center">
+                                  <p className="text-gray-400 line-through text-sm font-bold italic mb-1">{(room.price * 1.2).toLocaleString()}đ</p>
+                                  <p className="text-3xl font-black text-[#FF5E1F] tracking-tighter leading-none">
+                                    {room.price.toLocaleString()}đ
+                                  </p>
+                                  <p className="text-[10px] font-bold text-gray-400 mt-2">Chưa bao gồm thuế và phí</p>
                                 </div>
 
-                                <div className="col-span-3 pl-4 flex flex-col items-center gap-2">
+                                <div className="flex flex-col items-center gap-3">
                                   <Button
                                     onClick={() => {
                                       setSelectedRoom(room);
-                                      setTimeout(() => document.getElementById('accommodation-booking-confirm')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                                      // Scroll to booking confirmation bar directly
+                                      setTimeout(() => {
+                                        const confirmSection = document.getElementById('accommodation-booking-confirm');
+                                        if (confirmSection) {
+                                          confirmSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        }
+                                      }, 100);
                                     }}
-                                    className={`h-11 w-full max-w-[140px] rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg ${isSelected
-                                      ? 'bg-gray-900 text-white'
-                                      : 'bg-[#0094FF] text-white hover:bg-blue-600 shadow-blue-100 hover:-translate-y-0.5'
+                                    className={`h-14 px-10 rounded-[1.25rem] font-black text-sm uppercase tracking-widest shadow-lg transition-all duration-300 ${isSelected ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200' : 'bg-[#0094FF] hover:bg-blue-600 shadow-blue-200'
                                       }`}
                                   >
                                     {isSelected ? 'ĐÃ CHỌN' : 'CHỌN'}
                                   </Button>
-                                  <p className="text-[9px] font-bold text-blue-600 uppercase tracking-tighter">Còn {room.attribute?.available || 5} phòng!</p>
+                                  {room.quantity !== undefined && (
+                                    <div className="flex flex-col items-center">
+                                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest animate-pulse italic">
+                                        CÒN {room.quantity} PHÒNG!
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -843,11 +934,22 @@ export default function ServiceDetail() {
                               alt="selected"
                             />
                           </div>
-                          <div className="space-y-1">
-                            <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em]">Phòng bạn đang chọn</p>
-                            <h4 className="text-xl font-black text-white uppercase tracking-tight italic line-clamp-1">{selectedRoom.name_room}</h4>
-                            <div className="flex items-center gap-3">
+                          <div className="space-y-1 flex-1">
+                            <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em]">Cấu hình đặt phòng</p>
+                            <h4 className="text-xl font-black text-white uppercase tracking-tight italic line-clamp-1 mb-2">{selectedRoom.name_room}</h4>
+                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                               <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/50"><Users size={12} className="text-blue-500" /> {selectedRoom.max_guest} Khách</span>
+                              <div className="flex items-center gap-4 bg-white/5 px-4 py-1.5 rounded-full border border-white/10">
+                                <span className={`flex items-center gap-1.5 text-[10px] font-bold ${new Date(checkInDate) < new Date(new Date().setHours(0, 0, 0, 0)) ? 'text-red-400 animate-pulse' : 'text-white/80'}`}>
+                                  <Calendar size={12} className={new Date(checkInDate) < new Date(new Date().setHours(0, 0, 0, 0)) ? 'text-red-500' : 'text-blue-500'} />
+                                  {new Date(checkInDate).toLocaleDateString('vi-VN')}
+                                  {new Date(checkInDate) < new Date(new Date().setHours(0, 0, 0, 0)) && <span className="text-[7px] ml-1">(Quá khứ)</span>}
+                                </span>
+                                <div className="w-px h-3 bg-white/10" />
+                                <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/80">
+                                  {new Date(checkOutDate).toLocaleDateString('vi-VN')}
+                                </span>
+                              </div>
                               <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/50"><Clock size={12} className="text-blue-500" /> Nhận 14:00</span>
                             </div>
                           </div>
@@ -1035,6 +1137,58 @@ export default function ServiceDetail() {
                 <div className="space-y-8 animate-in fade-in slide-in-from-right-10 duration-700">
                   <Card className="bg-white rounded-[2.5rem] p-8 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.06)] border border-gray-50">
                     <div className="space-y-6">
+                      {/* Global Date Selection for Accommodation */}
+                      <div className="p-6 rounded-[2rem] bg-gray-50 border border-gray-100 space-y-4">
+                        <div className="flex flex-col gap-4">
+                          <div className="flex items-center gap-3">
+                            <Calendar size={18} className="text-blue-500" />
+                            <div className="flex flex-col flex-1">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Ngày nhận phòng</label>
+                              <input
+                                type="date"
+                                value={checkInDate}
+                                min={defaults.min}
+                                onChange={(e) => {
+                                  const selected = new Date(e.target.value);
+                                  const today = new Date();
+                                  today.setHours(0, 0, 0, 0);
+                                  if (selected < today) {
+                                    alert('Không thể chọn ngày trong quá khứ');
+                                    return;
+                                  }
+                                  setCheckInDate(e.target.value);
+                                  const nextDay = new Date(e.target.value);
+                                  nextDay.setDate(nextDay.getDate() + 1);
+                                  if (new Date(checkOutDate) <= new Date(e.target.value)) {
+                                    setCheckOutDate(nextDay.toISOString().split('T')[0]);
+                                  }
+                                }}
+                                className="bg-transparent border-none p-0 focus:ring-0 text-sm font-black text-gray-900 w-full"
+                              />
+                            </div>
+                          </div>
+                          <div className="h-px bg-gray-200" />
+                          <div className="flex items-center gap-3">
+                            <Calendar size={18} className="text-blue-500" />
+                            <div className="flex flex-col flex-1">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Ngày trả phòng</label>
+                              <input
+                                type="date"
+                                value={checkOutDate}
+                                min={new Date(new Date(checkInDate).getTime() + 86400000).toISOString().split('T')[0]}
+                                onChange={(e) => {
+                                  if (new Date(e.target.value) <= new Date(checkInDate)) {
+                                    alert('Ngày trả phòng phải sau ngày nhận phòng');
+                                    return;
+                                  }
+                                  setCheckOutDate(e.target.value);
+                                }}
+                                className="bg-transparent border-none p-0 focus:ring-0 text-sm font-black text-gray-900 w-full"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div className="flex items-center justify-between">
                         <Badge className="bg-blue-600 text-white border-none font-black text-[9px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-full">
                           {service.acc_attribute?.type || 'Luxury Resort'}
@@ -1181,8 +1335,17 @@ export default function ServiceDetail() {
                               type="date"
                               className="h-14 rounded-2xl bg-white border-gray-200 font-bold text-sm focus:ring-2 focus:ring-blue-600 transition-all pl-12 shadow-sm"
                               value={bookingDate}
-                              onChange={(e) => setBookingDate(e.target.value)}
-                              min={new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}
+                              onChange={(e) => {
+                                const selected = new Date(e.target.value);
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                if (selected < today) {
+                                  alert('Không thể chọn ngày trong quá khứ');
+                                  return;
+                                }
+                                setBookingDate(e.target.value);
+                              }}
+                              min={new Date(new Date().setHours(0, 0, 0, 0)).toISOString().split('T')[0]}
                             />
                             <Calendar className="absolute left-4 top-4 text-blue-500" size={20} />
                           </div>
@@ -1383,6 +1546,94 @@ export default function ServiceDetail() {
             />
           )
         }
+
+        {/* Room Detail Dialog */}
+        <Dialog open={showRoomDetail} onOpenChange={setShowRoomDetail}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] p-0 border-none shadow-2xl">
+            {previewRoom && (
+              <div className="flex flex-col">
+                <div className="relative h-[400px]">
+                  <img
+                    src={getImageUrl(previewRoom.media?.[0]?.url || previewRoom.attribute?.images?.[0])}
+                    className="w-full h-full object-cover"
+                    alt={previewRoom.name_room}
+                  />
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-8 md:p-12">
+                    <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic tracking-tighter">{previewRoom.name_room}</h2>
+                    <div className="flex items-center gap-6 mt-4">
+                      <span className="flex items-center gap-2 text-white/80 font-bold text-sm"><Users size={18} className="text-blue-400" /> {previewRoom.max_guest} Khách tối đa</span>
+                      <span className="flex items-center gap-2 text-white/80 font-bold text-sm"><Home size={18} className="text-blue-400" /> {previewRoom.attribute?.room_size || '32.0 m²'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-8 md:p-12 space-y-10 bg-white">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+                    <div className="md:col-span-2 space-y-8">
+                      <div className="space-y-4">
+                        <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] italic">Mô tả phòng</h3>
+                        <p className="text-gray-600 leading-relaxed font-medium whitespace-pre-line">
+                          {previewRoom.description || "Phòng được thiết kế sang trọng với tầm nhìn tuyệt đẹp, mang lại không gian thư giãn hoàn hảo cho kỳ nghỉ của bạn. Tiện nghi hiện đại và cao cấp theo tiêu chuẩn quốc tế."}
+                        </p>
+                      </div>
+
+                      {previewRoom.media && previewRoom.media.length > 1 && (
+                        <div className="space-y-4">
+                          <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] italic">Hình ảnh chi tiết</h3>
+                          <div className="grid grid-cols-2 gap-4">
+                            {previewRoom.media.slice(1).map((m: any, i: number) => (
+                              <div key={i} className="aspect-video rounded-2xl overflow-hidden shadow-md">
+                                <img src={getImageUrl(m.url)} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" alt={`Room ${i}`} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-8">
+                      <div className="space-y-4">
+                        <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] italic">Tiện ích phòng</h3>
+                        <div className="grid grid-cols-1 gap-3">
+                          {previewRoom.attribute?.facilities?.length > 0 ? (
+                            previewRoom.attribute.facilities.map((f: string) => (
+                              <div key={f} className="flex items-center gap-3 text-gray-700">
+                                <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                                <span className="text-xs font-bold italic">{f}</span>
+                              </div>
+                            ))
+                          ) : (
+                            ['Điều hòa nhiệt độ', 'WiFi tốc độ cao', 'TV Truyền hình cáp', 'Minibar', 'Trà & Cà phê miễn phí', 'Két sắt an toàn', 'Máy sấy tóc'].map(f => (
+                              <div key={f} className="flex items-center gap-3 text-gray-700">
+                                <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                                <span className="text-xs font-bold italic">{f}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100 flex flex-col items-center justify-center text-center gap-4">
+                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none">Giá chỉ từ</p>
+                        <p className="text-3xl font-black text-[#FF5E1F] tracking-tighter">{(previewRoom.price).toLocaleString()}đ<span className="text-[10px] text-gray-400 font-bold lowercase ml-1">/đêm</span></p>
+                        <Button
+                          onClick={() => {
+                            setSelectedRoom(previewRoom);
+                            setShowRoomDetail(false);
+                            setTimeout(() => document.getElementById('accommodation-booking-confirm')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                          }}
+                          className="w-full bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest h-12"
+                        >
+                          CHỌN HẠNG PHÒNG NÀY
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

@@ -45,6 +45,8 @@ export default function BookingPage() {
         const q_trip = params.get('id_trip');
         const q_seats = params.get('seats');
         const q_date = params.get('booking_date');
+        const q_start = params.get('start_date');
+        const q_end = params.get('end_date');
 
         setFormData(prev => ({
             ...prev,
@@ -52,8 +54,9 @@ export default function BookingPage() {
             id_room: q_room,
             id_trip: q_trip,
             selectedSeats: q_seats ? q_seats.split(',') : [],
-            bookingDate: q_date || '',
-            checkInDate: q_date || '', // Default for hotel if single date passed
+            bookingDate: q_date || q_start || '',
+            checkInDate: q_start || q_date || '',
+            checkOutDate: q_end || '',
         }));
     }, []);
 
@@ -383,7 +386,19 @@ export default function BookingPage() {
                                                             type="date"
                                                             className="h-16 rounded-2xl bg-gray-50 border-transparent font-black text-lg focus:bg-white focus:ring-2 focus:ring-blue-600 transition-all pl-14 shadow-sm"
                                                             value={formData.checkInDate}
-                                                            onChange={(e) => setFormData({ ...formData, checkInDate: e.target.value })}
+                                                            onChange={(e) => {
+                                                                const newStart = e.target.value;
+                                                                setFormData(prev => {
+                                                                    let newEnd = prev.checkOutDate;
+                                                                    if (newEnd && new Date(newEnd) <= new Date(newStart)) {
+                                                                        const next = new Date(newStart);
+                                                                        next.setDate(next.getDate() + 1);
+                                                                        newEnd = next.toISOString().split('T')[0];
+                                                                    }
+                                                                    return { ...prev, checkInDate: newStart, checkOutDate: newEnd };
+                                                                });
+                                                            }}
+                                                            min={new Date().toISOString().split('T')[0]}
                                                         />
                                                         <Calendar className="absolute left-5 top-5 text-blue-500" size={24} />
                                                     </div>
@@ -396,6 +411,11 @@ export default function BookingPage() {
                                                             className="h-16 rounded-2xl bg-gray-50 border-transparent font-black text-lg focus:bg-white focus:ring-2 focus:ring-blue-600 transition-all pl-14 shadow-sm"
                                                             value={formData.checkOutDate}
                                                             onChange={(e) => setFormData({ ...formData, checkOutDate: e.target.value })}
+                                                            min={(() => {
+                                                                const next = new Date(formData.checkInDate || new Date());
+                                                                next.setDate(next.getDate() + 1);
+                                                                return next.toISOString().split('T')[0];
+                                                            })()}
                                                         />
                                                         <Calendar className="absolute left-5 top-5 text-blue-500" size={24} />
                                                     </div>
@@ -662,19 +682,24 @@ export default function BookingPage() {
 
                                     <div className="space-y-6">
                                         <div className="p-8 rounded-[2rem] bg-gray-50 border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="space-y-1">
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Thời gian hành trình</p>
-                                                <p className="font-black text-gray-900 text-lg">
-                                                    {service.item_type === 'accommodation'
-                                                        ? `${formData.checkInDate} → ${formData.checkOutDate}`
-                                                        : formData.bookingDate || 'Chưa chọn'}
-                                                </p>
-                                            </div>
-                                            <div className="space-y-1 md:text-right">
+                                            {service.item_type !== 'vehicle' && (
+                                                <div className="space-y-1">
+                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Thời gian hành trình</p>
+                                                    <p className="font-black text-gray-900 text-lg">
+                                                        {service.item_type === 'accommodation'
+                                                            ? `${formData.checkInDate} → ${formData.checkOutDate}`
+                                                            : formData.bookingDate || 'Chưa chọn'}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            <div className={`space-y-1 ${service.item_type === 'vehicle' ? 'col-span-full' : 'md:text-right'}`}>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Chi tiết số lượng</p>
                                                 <p className="font-black text-gray-900 text-lg">
                                                     {service.item_type === 'vehicle'
-                                                        ? `${formData.selectedSeats?.length || 0} Ghế (${formData.selectedSeats?.join(', ')})`
+                                                        ? `${formData.selectedSeats?.length || 0} Ghế (${formData.selectedSeats?.map((sid: any) => {
+                                                            const pos = service.positions?.find((p: any) => String(p.id_position) === String(sid));
+                                                            return pos?.code_position || sid;
+                                                        }).join(', ')})`
                                                         : `x${formData.quantity} ${service.item_type === 'accommodation' ? 'Phòng' : 'Khách'}`}
                                                 </p>
                                             </div>

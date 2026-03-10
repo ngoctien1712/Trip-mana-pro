@@ -88,6 +88,7 @@ export const ServiceDetail = () => {
                 arrivalWardId: service.arrivalWardId || '',
                 departureDate: service.departureDate || '',
                 arrivalDate: service.arrivalDate || '',
+                totalRooms: service.totalRooms || 0,
                 attribute: service.attribute || {}
             });
             setAttribute({
@@ -165,6 +166,7 @@ export const ServiceDetail = () => {
     // Room/Position Dialog States
     const [roomName, setRoomName] = useState('');
     const [roomMaxGuest, setRoomMaxGuest] = useState('2');
+    const [roomQuantity, setRoomQuantity] = useState('1');
     const [roomPrice, setRoomPrice] = useState('');
     const [roomFacilities, setRoomFacilities] = useState<string[]>([]);
     const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
@@ -187,7 +189,7 @@ export const ServiceDetail = () => {
             queryClient.invalidateQueries({ queryKey: ['owner', 'service-detail', idItem] });
         },
         onError: (err: any) => {
-            toast({ title: 'Lỗi', description: err.response?.data?.message || 'Không thể cập nhật dịch vụ', variant: 'destructive' });
+            toast({ title: 'Lỗi', description: err.message || 'Không thể cập nhật dịch vụ', variant: 'destructive' });
         }
     });
 
@@ -308,7 +310,7 @@ export const ServiceDetail = () => {
             queryClient.invalidateQueries({ queryKey: ['owner', 'service-detail', idItem] });
         },
         onError: (err: any) => {
-            toast({ title: 'Lỗi', description: err.response?.data?.message || 'Không thể thêm loại phòng', variant: 'destructive' });
+            toast({ title: 'Lỗi', description: err.message || 'Không thể thêm loại phòng', variant: 'destructive' });
         }
     });
 
@@ -326,7 +328,7 @@ export const ServiceDetail = () => {
             queryClient.invalidateQueries({ queryKey: ['owner', 'service-detail', idItem] });
         },
         onError: (err: any) => {
-            toast({ title: 'Lỗi', description: err.response?.data?.message || 'Không thể cập nhật hạng phòng', variant: 'destructive' });
+            toast({ title: 'Lỗi', description: err.message || 'Không thể cập nhật hạng phòng', variant: 'destructive' });
         }
     });
 
@@ -337,7 +339,7 @@ export const ServiceDetail = () => {
             queryClient.invalidateQueries({ queryKey: ['owner', 'service-detail', idItem] });
         },
         onError: (err: any) => {
-            toast({ title: 'Lỗi', description: err.response?.data?.message || 'Không thể xóa phòng', variant: 'destructive' });
+            toast({ title: 'Lỗi', description: err.message || 'Không thể xóa phòng', variant: 'destructive' });
         }
     });
 
@@ -356,7 +358,7 @@ export const ServiceDetail = () => {
             queryClient.invalidateQueries({ queryKey: ['owner', 'service-detail', idItem] });
         },
         onError: (err: any) => {
-            toast({ title: 'Lỗi', description: err.response?.data?.message || 'Không thể tải lên ảnh phòng', variant: 'destructive' });
+            toast({ title: 'Lỗi', description: err.message || 'Không thể tải lên ảnh phòng', variant: 'destructive' });
         }
     });
 
@@ -763,7 +765,7 @@ export const ServiceDetail = () => {
                                     <Card>
                                         <CardHeader><CardTitle>Tiện nghi & Xếp hạng</CardTitle></CardHeader>
                                         <CardContent className="space-y-6">
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                                 <div className="space-y-2">
                                                     <Label>Loại hình</Label>
                                                     <select
@@ -781,6 +783,10 @@ export const ServiceDetail = () => {
                                                 <div className="space-y-2">
                                                     <Label>Số sao (1-5)</Label>
                                                     <Input type="number" min="1" max="5" value={extraData.starRating || extraData.stars || ''} onChange={(e) => setExtraData({ ...extraData, starRating: Number(e.target.value) })} />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Tổng số phòng</Label>
+                                                    <Input type="number" min="0" value={extraData.totalRooms || 0} onChange={(e) => setExtraData({ ...extraData, totalRooms: Number(e.target.value) })} />
                                                 </div>
                                                 <div className="space-y-2">
                                                     <Label>Giờ Check-in</Label>
@@ -941,6 +947,7 @@ export const ServiceDetail = () => {
                                                     setEditingRoomId(null);
                                                     setRoomName('');
                                                     setRoomMaxGuest('2');
+                                                    setRoomQuantity('1');
                                                     setRoomPrice('');
                                                     setRoomFacilities([]);
                                                     setRoomDescription('');
@@ -958,9 +965,10 @@ export const ServiceDetail = () => {
                                                         <DialogTitle>{editingRoomId ? 'Chỉnh sửa hạng phòng' : 'Thêm phòng mới'}</DialogTitle>
                                                     </DialogHeader>
                                                     <div className="grid gap-6 py-4">
-                                                        <div className="grid grid-cols-2 gap-4">
+                                                        <div className="grid grid-cols-3 gap-4">
                                                             <div className="space-y-2"><Label>Tên loại phòng</Label><Input value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="VD: Deluxe Suite" /></div>
                                                             <div className="space-y-2"><Label>Số khách tối đa</Label><Input type="number" value={roomMaxGuest} onChange={(e) => setRoomMaxGuest(e.target.value)} /></div>
+                                                            <div className="space-y-2"><Label>Số lượng hạng phòng này</Label><Input type="number" value={roomQuantity} onChange={(e) => setRoomQuantity(e.target.value)} /></div>
                                                         </div>
                                                         <div className="space-y-2"><Label>Giá phòng / đêm (Mặc định: {price || 0})</Label><Input type="number" value={roomPrice} onChange={(e) => setRoomPrice(e.target.value)} /></div>
 
@@ -1139,7 +1147,8 @@ export const ServiceDetail = () => {
                                                                     price: Number(roomPrice) || Number(price),
                                                                     attribute: { facilities: roomFacilities },
                                                                     media: roomMedia,
-                                                                    description: roomDescription
+                                                                    description: roomDescription,
+                                                                    quantity: roomQuantity === '' ? 1 : Number(roomQuantity)
                                                                 };
                                                                 if (editingRoomId) updateRoomMut.mutate(data);
                                                                 else addRoomMut.mutate(data);
@@ -1158,7 +1167,10 @@ export const ServiceDetail = () => {
                                                         <div className="flex justify-between items-start mb-2">
                                                             <div>
                                                                 <h4 className="font-bold text-lg text-foreground/90 group-hover/room:text-primary transition-colors">{room.nameRoom}</h4>
-                                                                <p className="text-xs text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Tối đa {room.maxGuest} người</p>
+                                                                <div className="flex gap-4">
+                                                                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Tối đa {room.maxGuest} người</p>
+                                                                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" /> Số lượng {room.quantity ?? 1} phòng</p>
+                                                                </div>
                                                             </div>
                                                             <div className="flex flex-col items-end">
                                                                 <div className="flex gap-2 mb-1 opacity-0 group-hover/room:opacity-100 transition-opacity">
@@ -1170,6 +1182,7 @@ export const ServiceDetail = () => {
                                                                             setEditingRoomId(room.idRoom);
                                                                             setRoomName(room.nameRoom || '');
                                                                             setRoomMaxGuest((room.maxGuest || 2).toString());
+                                                                            setRoomQuantity((room.quantity ?? 1).toString());
                                                                             setRoomPrice((room.price || 0).toString());
                                                                             setRoomFacilities(room.attribute?.facilities || []);
                                                                             setRoomDescription(room.description || '');

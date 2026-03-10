@@ -75,6 +75,8 @@ export const OwnerOrders = () => {
                 return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-none shadow-sm px-3 py-1 rounded-full font-bold flex items-center w-fit"><RefreshCw size={12} className="mr-1 animate-spin-slow" /> Đang xử lý</Badge>;
             case 'cancelled':
                 return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-none shadow-sm px-3 py-1 rounded-full font-bold flex items-center w-fit"><XCircle size={12} className="mr-1" /> Đã hủy</Badge>;
+            case 'refunded':
+                return <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 border-none shadow-sm px-3 py-1 rounded-full font-bold flex items-center w-fit"><RefreshCw size={12} className="mr-1" /> Đã hoàn tiền</Badge>;
             case 'pending':
             default:
                 return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none shadow-sm px-3 py-1 rounded-full font-bold flex items-center w-fit"><Clock size={12} className="mr-1" /> Chờ xử lý</Badge>;
@@ -93,20 +95,21 @@ export const OwnerOrders = () => {
                         <Button
                             variant="default"
                             size="sm"
-                            className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 rounded-xl shadow-sm border-none shadow-emerald-200"
+                            className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black px-5 rounded-xl shadow-lg shadow-emerald-200 border-none transition-all active:scale-95"
                             onClick={() => handleUpdateStatus(order.id, 'confirmed')}
                             disabled={updateStatusMutation.isPending}
                         >
-                            <CheckCircle size={14} className="mr-1.5" />
+                            <CheckCircle size={16} className="mr-2" />
                             Xác nhận
                         </Button>
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-9 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 font-bold px-4 rounded-xl"
+                            className="h-10 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 hover:border-red-300 font-black px-5 rounded-xl transition-all active:scale-95"
                             onClick={() => handleUpdateStatus(order.id, 'cancelled')}
                             disabled={updateStatusMutation.isPending}
                         >
+                            <XCircle size={16} className="mr-2" />
                             Từ chối
                         </Button>
                     </>
@@ -116,42 +119,42 @@ export const OwnerOrders = () => {
                     <Button
                         variant="default"
                         size="sm"
-                        className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 rounded-xl shadow-sm border-none shadow-emerald-200"
+                        className="h-10 bg-blue-600 hover:bg-blue-700 text-white font-black px-5 rounded-xl shadow-lg shadow-blue-200 border-none transition-all active:scale-95"
                         onClick={() => handleUpdateStatus(order.id, 'completed')}
                         disabled={updateStatusMutation.isPending}
                     >
-                        <CheckCircle size={14} className="mr-1.5" />
+                        <CheckCircle size={16} className="mr-2" />
                         Hoàn thành
                     </Button>
                 )}
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100">
-                            <MoreHorizontal size={18} />
+                        <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-slate-100 transition-colors">
+                            <MoreHorizontal size={20} />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48 p-2 rounded-2xl shadow-xl border-slate-100">
+                    <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl shadow-2xl border-slate-100 animate-in fade-in zoom-in duration-200">
                         <DropdownMenuItem
-                            className="cursor-pointer font-bold py-2.5 rounded-xl flex items-center"
+                            className="cursor-pointer font-black py-3 rounded-xl flex items-center text-slate-700 hover:bg-slate-50 transition-colors"
                             onClick={() => navigate(`/owner/orders/${order.id}`)}
                         >
-                            <Eye size={16} className="mr-2.5 text-slate-400" /> Chi tiết đơn
+                            <Eye size={18} className="mr-3 text-slate-400" /> Chi tiết đơn
                         </DropdownMenuItem>
                         {isConfirmed && (
                             <DropdownMenuItem
-                                className="cursor-pointer font-bold py-2.5 rounded-xl flex items-center text-indigo-600"
+                                className="cursor-pointer font-black py-3 rounded-xl flex items-center text-indigo-600 hover:bg-indigo-50 transition-colors"
                                 onClick={() => handleUpdateStatus(order.id, 'processing')}
                             >
-                                <RefreshCw size={16} className="mr-2.5" /> Đang xử lý
+                                <RefreshCw size={18} className="mr-3" /> Đang xử lý
                             </DropdownMenuItem>
                         )}
                         {!['cancelled', 'completed', 'refunded'].includes(order.status) && (
                             <DropdownMenuItem
-                                className="cursor-pointer font-bold py-2.5 rounded-xl flex items-center text-red-600"
+                                className="cursor-pointer font-black py-3 rounded-xl flex items-center text-red-600 hover:bg-red-50 transition-colors"
                                 onClick={() => handleUpdateStatus(order.id, 'cancelled')}
                             >
-                                <XCircle size={16} className="mr-2.5" /> Hủy bỏ đơn
+                                <XCircle size={18} className="mr-3" /> Hủy bỏ đơn
                             </DropdownMenuItem>
                         )}
                     </DropdownMenuContent>
@@ -232,13 +235,12 @@ export const OwnerOrders = () => {
                                                     <p className="text-slate-900 font-black text-xl">Rất tiếc!</p>
                                                     <p className="text-slate-400 font-medium tracking-tight">Chúng tôi không tìm thấy đơn hàng nào phù hợp.</p>
                                                 </div>
-                                                <Button
-                                                    variant="link"
+                                                <button
                                                     onClick={() => { setStatusFilter('all'); setSearch(''); }}
-                                                    className="text-blue-600 font-black uppercase tracking-widest text-xs hover:no-underline hover:text-blue-700"
+                                                    className="text-blue-600 font-black uppercase tracking-widest text-xs hover:no-underline hover:text-blue-700 transition-colors"
                                                 >
                                                     Xóa tất cả bộ lọc
-                                                </Button>
+                                                </button>
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -259,11 +261,13 @@ export const OwnerOrders = () => {
                                                     </div>
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="py-8 max-w-[240px]">
+                                            <TableCell className="py-8 max-w-[280px]">
                                                 <p className="truncate font-black text-slate-600" title={order.items?.[0]?.serviceName}>
                                                     {order.items?.[0]?.serviceName || 'N/A'}
-                                                    {order.items?.length > 1 && (
-                                                        <span className="ml-2 px-1.5 py-0.5 bg-slate-100 rounded-lg text-slate-400 font-black text-[9px] uppercase">+{order.items.length - 1} khác</span>
+                                                    {(order.items?.[0] as any)?.count > 1 && (
+                                                        <span className="ml-2 px-2 py-0.5 bg-slate-100 rounded-lg text-slate-400 font-black text-[9px] uppercase">
+                                                            +{(order.items[0] as any).count - 1} dịch vụ
+                                                        </span>
                                                     )}
                                                 </p>
                                             </TableCell>

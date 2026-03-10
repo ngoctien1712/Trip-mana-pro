@@ -128,8 +128,13 @@ export const customerApi = {
     return { items };
   },
 
-  async getServiceDetail(id: string): Promise<any> {
-    return httpClient.get<any>(`/customer/services/${id}`);
+  async getServiceDetail(id: string, params: { checkIn?: string; checkOut?: string } = {}): Promise<any> {
+    const searchParams = new URLSearchParams();
+    if (params.checkIn) searchParams.set('checkIn', params.checkIn);
+    if (params.checkOut) searchParams.set('checkOut', params.checkOut);
+    searchParams.set('_t', Date.now().toString()); // Force fresh data for availability
+    const query = searchParams.toString();
+    return httpClient.get<any>(`/customer/services/${id}?${query}`);
   },
 
   // ---- Booking ----

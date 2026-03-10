@@ -116,12 +116,33 @@ export default function OwnerOrderDetail() {
                         </Button>
                     )}
                     {['confirmed', 'processing'].includes(order.status) && (
-                        <Button
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl px-6 h-12 shadow-lg shadow-emerald-100"
-                            onClick={() => handleUpdateStatus('completed')}
-                        >
-                            <CheckCircle2 size={18} className="mr-2" /> Hoàn thành
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl px-6 h-12 shadow-lg shadow-emerald-100"
+                                onClick={() => handleUpdateStatus('completed')}
+                            >
+                                <CheckCircle2 size={18} className="mr-2" /> Hoàn thành
+                            </Button>
+                            {order.order_type === 'accommodation' && order.status !== 'cancelled' && (
+                                <Button
+                                    variant="outline"
+                                    className="border-blue-200 text-blue-600 hover:bg-blue-50 font-black rounded-2xl px-6 h-12"
+                                    onClick={async () => {
+                                        if (confirm('Bạn có chắc chắn muốn phát trả phòng sớm? Việc này sẽ giải phóng phòng cho khách khác đặt ngay từ hôm nay, trong khi trạng thái đơn hàng vẫn được giữ nguyên.')) {
+                                            try {
+                                                await ownerApi.releaseRoom(id!);
+                                                toast.success('Đã giải phóng phòng thành công');
+                                                fetchOrder();
+                                            } catch (err: any) {
+                                                toast.error(err.message || 'Lỗi khi giải phóng phòng');
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <RefreshCw size={18} className="mr-2" /> Trả phòng sớm
+                                </Button>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
