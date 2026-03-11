@@ -16,10 +16,13 @@ import {
   Search,
   Globe,
   MapPin,
+  Wallet,
+  Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { NotificationCenter } from '@/components/NotificationCenter';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,7 +38,8 @@ const sidebarItems = [
   { icon: Globe, label: 'Địa điểm', path: '/admin/geography' },
   { icon: Users, label: 'Duyệt đăng ký đối tác', path: '/admin/business-registrations' },
   { icon: Building2, label: 'Duyệt nhà cung cấp', path: '/admin/providers' },
-  { icon: Map, label: 'Dịch vụ', path: '/admin/services' },
+  { icon: Map, label: 'Giám sát dịch vụ', path: '/admin/activities' },
+  { icon: Wallet, label: 'Tính lương đối tác', path: '/admin/payroll' },
   { icon: ShoppingBag, label: 'Đơn hàng', path: '/admin/orders' },
   { icon: Ticket, label: 'Voucher', path: '/admin/vouchers' },
 ];
@@ -159,12 +163,7 @@ export const AdminLayout = () => {
 
           <div className="ml-auto flex items-center gap-3">
             {/* Notifications */}
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground">
-                3
-              </span>
-            </Button>
+            <NotificationCenter />
 
             {/* User menu */}
             <DropdownMenu>

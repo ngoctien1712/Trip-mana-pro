@@ -10,8 +10,10 @@ import ownerRoutes from './routes/owner.routes.js';
 import customerRoutes from './routes/customer.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 import planningRoutes from './routes/planning.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
 import { startOrderMonitor } from './services/order-monitor.service.js';
 import { startPaymentWorker } from './workers/payment.worker.js';
+import { startEmailWorker } from './workers/email.worker.js';
 import { cleanupAllTokens } from './utils/token.js';
 
 const app = express();
@@ -23,6 +25,7 @@ const PORT = process.env.PORT || 3000;
 // Start the periodic order monitor (SQL Polling) - (Keep as backup if needed, but the worker is preferred)
 // startOrderMonitor();
 startPaymentWorker();
+startEmailWorker();
 
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:8080', credentials: true }));
 app.use(express.json());
@@ -40,6 +43,7 @@ app.use('/api/geography', geographyRoutes);
 app.use('/api/owner', ownerRoutes);
 app.use('/api/customer', customerRoutes);
 app.use('/api/planning', planningRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 

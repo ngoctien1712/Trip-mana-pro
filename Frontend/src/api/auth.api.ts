@@ -46,6 +46,9 @@ export const authApi = {
   resetPassword: (token: string, password: string) =>
     httpClient.post<{ message: string }>('/auth/reset-password', { token, password }),
 
-  verifyAccount: (token: string) =>
-    httpClient.post<{ message: string }>('/auth/verify-account', { token }),
+  verifyOTP: (email: string, otp: string) =>
+    httpClient.post<{ message: string }>('/auth/verify-otp', { email, otp }),
+
+  resendOTP: (email: string) =>
+    httpClient.post<{ message: string }>('/auth/resend-otp', { email }),
 };

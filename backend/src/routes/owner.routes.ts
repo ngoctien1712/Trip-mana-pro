@@ -8,9 +8,11 @@ import { upload } from '../utils/upload.js';
 const router = Router();
 
 router.use(auth);
-router.use(requireRole('owner'));
+router.use(requireRole('owner', 'admin'));
 
 router.get('/area-ownerships', ownerController.getMyAreaOwnerships);
+router.get('/dashboard', ownerController.getOwnerDashboard);
+router.get('/payroll-history', ownerController.getMyPayrollHistory);
 router.get('/providers', ownerController.getMyProviders);
 router.get('/bookable-items', ownerController.getMyBookableItems);
 router.post(
@@ -112,6 +114,7 @@ router.delete(
 );
 
 router.get('/vouchers', voucherController.getMyVouchers);
+router.get('/vouchers/:idVoucher', voucherController.getVoucherDetail);
 router.post(
   '/vouchers',
   [

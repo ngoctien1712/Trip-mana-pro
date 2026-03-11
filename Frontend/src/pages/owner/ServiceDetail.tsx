@@ -208,7 +208,7 @@ export const ServiceDetail = () => {
         mutationFn: () => ownerGeographyApi.deleteService(idItem!),
         onSuccess: () => {
             toast({ title: 'Đã xóa', description: 'Dịch vụ đã được gỡ bỏ khỏi hệ thống' });
-            navigate('/owner/services');
+            navigate(-1);
         },
         onError: (err: any) => {
             toast({ title: 'Lỗi', description: err.response?.data?.message || 'Không thể xóa dịch vụ', variant: 'destructive' });
@@ -243,7 +243,7 @@ export const ServiceDetail = () => {
         if (url.startsWith('http')) return url;
         if (url.startsWith('blob:')) return url;
         const cleanUrl = url.startsWith('/') ? url : `/${url}`;
-        return `http://localhost:3000${cleanUrl}`;
+        return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}${cleanUrl}`;
     };
 
     const addPosMut = useMutation({
@@ -506,7 +506,7 @@ export const ServiceDetail = () => {
             {/* Header Sticky */}
             <div className="z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 py-4 border-b -mx-6 px-6 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate('/owner/services')}>
+                    <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
                     <div>

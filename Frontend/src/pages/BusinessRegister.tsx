@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { authApi } from '@/api/auth.api';
 import { geographyApi } from '@/api/geography.api';
@@ -60,6 +60,7 @@ export const BusinessRegister = () => {
     const [countryId, setCountryId] = useState('');
     const [cityId, setCityId] = useState('');
     const [areaId, setAreaId] = useState('');
+    const [agreedTerms, setAgreedTerms] = useState(false);
 
     // Data fetching
     const { data: countriesRes } = useQuery({
@@ -119,6 +120,10 @@ export const BusinessRegister = () => {
             setError('Vui lòng đính kèm ít nhất một ảnh văn bản pháp lý (Giấy phép kinh doanh, MST...)');
             return false;
         }
+        if (!agreedTerms) {
+            setError('Bạn phải đồng ý với Điều khoản & Điều kiện');
+            return false;
+        }
         return true;
     };
 
@@ -155,6 +160,7 @@ export const BusinessRegister = () => {
             formData.append('contactEmail', contactEmail || email);
             formData.append('fanpage', fanpage);
             formData.append('serviceType', serviceType);
+            formData.append('agreedTerms', agreedTerms.toString());
 
             // Bank
             formData.append('bankName', bankName);
@@ -379,7 +385,21 @@ export const BusinessRegister = () => {
                             </CardContent>
                         </Card>
 
-                        <Button type="submit" size="lg" className="w-full py-8 text-xl shadow-lg hover:shadow-primary/30 transition-all font-bold" disabled={isLoading}>
+                        <div className="flex items-start space-x-2 p-1">
+                            <input
+                                id="terms"
+                                type="checkbox"
+                                checked={agreedTerms}
+                                onChange={(e) => setAgreedTerms(e.target.checked)}
+                                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                required
+                            />
+                            <Label htmlFor="terms" className="text-sm leading-relaxed cursor-pointer">
+                                Tôi đồng ý với <Link to="/terms" className="text-primary hover:underline font-semibold">Điều khoản & Điều kiện</Link> của VietTravel và cam kết thông tin cung cấp là chính xác.
+                            </Label>
+                        </div>
+
+                        <Button type="submit" size="lg" className="w-full py-8 text-xl shadow-lg hover:shadow-primary/30 transition-all font-bold" disabled={isLoading || !agreedTerms}>
                             {isLoading ? (
                                 <>
                                     <Loader2 className="mr-3 h-6 w-6 animate-spin" />

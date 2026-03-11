@@ -13,10 +13,17 @@ import {
   revokeRefreshToken
 } from '../utils/token.js';
 import { OAuth2Client } from 'google-auth-library';
+import redisConnection, { REDIS_KEYS } from '../config/redis.js';
+import { addEmailJob } from '../queues/email.queue.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const SALT_ROUNDS = 10;
+
+// Helper: generate 6-digit OTP
+function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 // Helper: get user primary role
 async function getUserRole(userId: string): Promise<UserRole> {
@@ -46,15 +53,21 @@ export async function register(req: Request, res: Response) {
     }
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const otp = generateOTP();
+
+    // Store OTP in Redis with 5 minutes TTL
+    await redisConnection.set(REDIS_KEYS.OTP_VERIFY(email), otp, 'EX', 300);
 
     const { rows: userRows } = await pool.query(
-      `INSERT INTO users (email, phone, full_name, password_hash, status, verification_token, auth_provider)
-       VALUES ($1, $2, $3, $4, 'pending', $5, 'local')
+      `INSERT INTO users (email, phone, full_name, password_hash, status, auth_provider)
+       VALUES ($1, $2, $3, $4, 'pending', 'local')
        RETURNING id_user, email, phone, full_name, status, created_at`,
-      [email, phone || null, fullName || null, hash, verificationToken]
+      [email, phone || null, fullName || null, hash]
     );
     const user = userRows[0];
+
+    // Send OTP via BullMQ
+    await addEmailJob('verification', { email: user.email, otp });
 
     // Force CUSTOMER role
     const roleCode = 'CUSTOMER';
@@ -76,26 +89,15 @@ export async function register(req: Request, res: Response) {
       [user.id_user]
     );
 
-    const userRole = await getUserRole(user.id_user);
-    const accessToken = generateAccessToken({
-      userId: user.id_user,
-      email: user.email,
-      role: userRole
-    });
-    const refreshToken = await generateRefreshToken(user.id_user);
-
     res.status(201).json({
       user: {
         id: user.id_user,
         email: user.email,
         fullName: user.full_name,
         phone: user.phone,
-        role: userRole,
         status: user.status,
       },
-      accessToken,
-      refreshToken,
-      message: 'Đăng ký thành công. Vui lòng xác thực email.',
+      message: 'Đăng ký thành công. Vui lòng kiểm tra email để lấy mã OTP xác thực.',
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -418,13 +420,86 @@ export async function verifyAccount(req: Request, res: Response) {
   }
 }
 
+export async function verifyOTP(req: Request, res: Response) {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Thiếu email hoặc mã OTP' });
+    }
+
+    const storedOTP = await redisConnection.get(REDIS_KEYS.OTP_VERIFY(email));
+
+    if (!storedOTP) {
+      return res.status(400).json({ message: 'Mã OTP đã hết hạn hoặc không tồn tại' });
+    }
+
+    if (storedOTP !== otp) {
+      return res.status(400).json({ message: 'Mã OTP không chính xác' });
+    }
+
+    // Activate user
+    const { rowCount } = await pool.query(
+      `UPDATE users SET status = 'active', email_verified_at = NOW(), updated_at = NOW()
+       WHERE email = $1 AND status = 'pending'`,
+      [email]
+    );
+
+    if (rowCount === 0) {
+      return res.status(404).json({ message: 'Người dùng không tồn tại hoặc đã được kích hoạt' });
+    }
+
+    // Delete OTP from Redis
+    await redisConnection.del(REDIS_KEYS.OTP_VERIFY(email));
+
+    res.json({ message: 'Xác thực tài khoản thành công. Bây giờ bạn có thể đăng nhập.' });
+  } catch (err) {
+    console.error('Verify OTP error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function resendOTP(req: Request, res: Response) {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Thiếu email' });
+    }
+
+    // Check if user exists and is pending
+    const { rows } = await pool.query(
+      'SELECT id_user FROM users WHERE email = $1 AND status = $2',
+      [email, 'pending']
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy tài khoản chờ xác thực với email này' });
+    }
+
+    const otp = generateOTP();
+
+    // Store OTP in Redis with 5 minutes TTL
+    await redisConnection.set(REDIS_KEYS.OTP_VERIFY(email), otp, 'EX', 300);
+
+    // Send OTP via BullMQ
+    await addEmailJob('verification', { email, otp });
+
+    res.json({ message: 'Mã OTP mới đã được gửi đến email của bạn' });
+  } catch (err) {
+    console.error('Resend OTP error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+
 export async function registerBusiness(req: Request, res: Response) {
   const client = await pool.connect();
   try {
     const {
       email, password, fullName, phone,
       businessName, areaId, businessPhone, contactEmail, fanpage, serviceType,
-      bankName, bankAccountNumber, bankAccountName
+      bankName, bankAccountNumber, bankAccountName, agreedTerms
     } = req.body;
 
     // Handle multiple files for legal documents
@@ -462,13 +537,15 @@ export async function registerBusiness(req: Request, res: Response) {
     const { rows: providerRows } = await client.query(
       `INSERT INTO provider (
         name, id_area, id_user, phone, email, fanpage, service_type, 
-        legal_documents, status, bank_name, bank_account_number, bank_account_name
+        legal_documents, status, bank_name, bank_account_number, bank_account_name,
+        agreed_terms, agreed_at
       ) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, $12, NOW())
        RETURNING id_provider, name, status`,
       [
         businessName, areaId, user.id_user, businessPhone || phone, contactEmail || email,
-        fanpage, serviceType || 'tour', legalDocuments, bankName, bankAccountNumber, bankAccountName
+        fanpage, serviceType || 'tour', legalDocuments, bankName, bankAccountNumber, bankAccountName,
+        agreedTerms === 'true' || agreedTerms === true
       ]
     );
 

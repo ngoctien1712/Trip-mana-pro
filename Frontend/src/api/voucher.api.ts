@@ -40,5 +40,8 @@ export const voucherApi = {
     deleteVoucher: async (id: string) => {
         return httpClient.delete<{ success: boolean }>(`/owner/vouchers/${id}`);
     },
+    getVoucherDetail: async (id: string) => {
+        return httpClient.get<{ data: Voucher }>(`/owner/vouchers/${id}`);
+    },
 };
 

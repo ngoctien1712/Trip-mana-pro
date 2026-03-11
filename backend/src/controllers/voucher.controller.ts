@@ -11,6 +11,30 @@ function toCamel(o: Record<string, unknown>): Record<string, unknown> {
     return r;
 }
 
+/** Get single voucher detail */
+export async function getVoucherDetail(req: Request, res: Response) {
+    try {
+        const userId = req.user!.userId;
+        const { idVoucher } = req.params;
+        const { rows } = await pool.query(
+            `SELECT v.*, p.name AS provider_name, bi.title AS item_title
+       FROM voucher v
+       JOIN provider p ON p.id_provider = v.id_provider
+       LEFT JOIN bookable_items bi ON bi.id_item = v.id_item
+       WHERE v.id_voucher = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+            [idVoucher, userId, req.user!.role]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Không tìm thấy voucher' });
+        }
+        res.json({ data: toCamel(rows[0] as Record<string, unknown>) });
+    } catch (err) {
+        console.error('Get voucher detail error:', err);
+        res.status(500).json({ message: 'Lỗi máy chủ' });
+    }
+}
+
 /** List all vouchers for current owner's providers */
 export async function getMyVouchers(req: Request, res: Response) {
     try {
@@ -20,9 +44,9 @@ export async function getMyVouchers(req: Request, res: Response) {
        FROM voucher v
        JOIN provider p ON p.id_provider = v.id_provider
        LEFT JOIN bookable_items bi ON bi.id_item = v.id_item
-       WHERE p.id_user = $1
+       WHERE (p.id_user = $1 OR $2 = 'admin')
        ORDER BY v.created_at DESC`,
-            [userId]
+            [userId, req.user!.role]
         );
         res.json({
             data: rows.map((r: Record<string, unknown>) => toCamel(r as Record<string, unknown>)),
@@ -45,8 +69,8 @@ export async function createVoucher(req: Request, res: Response) {
 
         // Security check: provider must belong to user
         const providerCheck = await pool.query(
-            'SELECT id_provider FROM provider WHERE id_provider = $1 AND id_user = $2',
-            [idProvider, userId]
+            'SELECT id_provider FROM provider WHERE id_provider = $1 AND (id_user = $2 OR $3 = \'admin\')',
+            [idProvider, userId, req.user!.role]
         );
 
         if (providerCheck.rows.length === 0) {
@@ -94,8 +118,8 @@ export async function updateVoucher(req: Request, res: Response) {
         const check = await pool.query(
             `SELECT v.id_voucher FROM voucher v
        JOIN provider p ON p.id_provider = v.id_provider
-       WHERE v.id_voucher = $1 AND p.id_user = $2`,
-            [idVoucher, userId]
+       WHERE v.id_voucher = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+            [idVoucher, userId, req.user!.role]
         );
 
         if (check.rows.length === 0) {
@@ -137,8 +161,8 @@ export async function deleteVoucher(req: Request, res: Response) {
         const check = await pool.query(
             `SELECT v.id_voucher FROM voucher v
        JOIN provider p ON p.id_provider = v.id_provider
-       WHERE v.id_voucher = $1 AND p.id_user = $2`,
-            [idVoucher, userId]
+       WHERE v.id_voucher = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+            [idVoucher, userId, req.user!.role]
         );
 
         if (check.rows.length === 0) {

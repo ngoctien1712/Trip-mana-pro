@@ -19,6 +19,7 @@ import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import VerifyAccount from "@/pages/VerifyAccount";
+import VerifyOTP from "@/pages/VerifyOTP";
 import BusinessRegister from "@/pages/BusinessRegister";
 import NotFound from "@/pages/NotFound";
 import Home from "@/pages/customer/Home";
@@ -35,14 +36,18 @@ import AdminUsers from "@/pages/admin/Users";
 import AdminGeography from "@/pages/admin/Geography";
 import AdminProviders from "@/pages/admin/Providers";
 import PendingBusinessApprovals from "@/pages/admin/PendingBusinessApprovals";
+import PayrollManagement from "@/pages/admin/PayrollManagement";
+import ActivityMonitoring from "@/pages/admin/ActivityMonitoring";
 import OwnerDashboard from "@/pages/owner/Dashboard";
 import OwnerMyProviders from "@/pages/owner/MyProviders";
 import OwnerMyServices from "@/pages/owner/MyServices";
 import OwnerServiceDetail from "@/pages/owner/ServiceDetail";
+import { VoucherDetail as AdminVoucherDetail } from "@/pages/admin/VoucherDetail";
 import OwnerOrders from "@/pages/owner/Orders";
 import OwnerOrderDetail from "@/pages/owner/OrderDetails";
 import OwnerVouchers from "@/pages/owner/Vouchers";
 import OwnerMessages from "@/pages/owner/Messages";
+import OwnerPayrollHistory from "@/pages/owner/PayrollHistory";
 import Profile from "@/pages/Profile";
 import CustomerProfile from "@/pages/customer/Profile";
 
@@ -65,6 +70,7 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/verify-account" element={<VerifyAccount />} />
+              <Route path="/verify-otp" element={<VerifyOTP />} />
 
               {/* Customer Routes */}
               <Route element={<CustomerLayout />}>
@@ -127,12 +133,12 @@ const App = () => (
                 <Route path="area-ownerships" element={<AdminProviders />} />
                 <Route path="providers" element={<AdminProviders />} />
                 <Route path="providers/:id" element={<AdminProviders />} />
-                <Route path="services" element={<AdminDashboard />} />
-                <Route path="services/:id" element={<AdminDashboard />} />
                 <Route path="orders" element={<AdminDashboard />} />
                 <Route path="orders/:id" element={<AdminDashboard />} />
-                <Route path="vouchers" element={<AdminDashboard />} />
-                <Route path="vouchers/:id" element={<AdminDashboard />} />
+                <Route path="payroll" element={<PayrollManagement />} />
+                <Route path="activities" element={<ActivityMonitoring />} />
+                <Route path="services/:idItem" element={<OwnerServiceDetail />} />
+                <Route path="vouchers/:idVoucher" element={<AdminVoucherDetail />} />
                 <Route path="profile" element={<Profile />} />
               </Route>
 
@@ -154,6 +160,7 @@ const App = () => (
                 <Route path="orders" element={<OwnerOrders />} />
                 <Route path="orders/:id" element={<OwnerOrderDetail />} />
                 <Route path="vouchers" element={<OwnerVouchers />} />
+                <Route path="payroll" element={<OwnerPayrollHistory />} />
                 <Route path="messages" element={<OwnerMessages />} />
                 <Route path="profile" element={<Profile />} />
               </Route>

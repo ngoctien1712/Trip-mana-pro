@@ -535,12 +535,17 @@ export const createBooking = async (req: Request, res: Response) => {
     }
 
     // 1. Fetch base price and provider from bookable_items
-    const itemQuery = await query('SELECT price, id_provider FROM bookable_items WHERE id_item = $1', [id_item]);
+    const itemQuery = await query(`
+      SELECT bi.price, bi.id_provider, p.commission_rate 
+      FROM bookable_items bi 
+      JOIN provider p ON bi.id_provider = p.id_provider
+      WHERE bi.id_item = $1`, [id_item]);
     if (!itemQuery.rows[0]) {
-      return res.status(404).json({ message: 'Dịch vụ không tồn tại' });
+      return res.status(404).json({ message: 'Dịch vụ hoặc nhà cung cấp không tồn tại' });
     }
     const price = Number(itemQuery.rows[0].price || 0);
     const itemProviderId = itemQuery.rows[0].id_provider;
+    const commissionRate = Number(itemQuery.rows[0].commission_rate || 0.15);
 
     let subtotal = 0;
     let totalItemQuantity = 1; // Default to 1 for calculation
@@ -707,10 +712,13 @@ export const createBooking = async (req: Request, res: Response) => {
       }
     }
 
+    const commissionAmount = totalAmount * commissionRate;
+    const ownerAmount = totalAmount - commissionAmount;
+
     const orderInsert = await query(
-      `INSERT INTO "order" (status, order_code, total_amount, currency, order_type, id_user, payment_method, id_voucher, discount_amount, subtotal_amount) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id_order`,
-      ['pending', orderCode, totalAmount, 'VND', item_type, userId, payment_method, idVoucher, discountAmount, subtotal]
+      `INSERT INTO "order" (status, order_code, total_amount, currency, order_type, id_user, payment_method, id_voucher, discount_amount, subtotal_amount, id_provider, commission_amount, owner_amount) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id_order`,
+      ['pending', orderCode, totalAmount, 'VND', item_type, userId, payment_method, idVoucher, discountAmount, subtotal, itemProviderId, commissionAmount, ownerAmount]
     );
     const idOrder = orderInsert.rows[0].id_order;
 

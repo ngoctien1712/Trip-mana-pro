@@ -23,9 +23,9 @@ export async function getMyBookableItems(req: Request, res: Response) {
        FROM bookable_items bi
        JOIN provider p ON p.id_provider = bi.id_provider
        LEFT JOIN area a ON a.id_area = bi.id_area
-       WHERE p.id_user = $1
+       WHERE (p.id_user = $1 OR $2 = 'admin')
        ORDER BY (COALESCE(bi.attribute->>'group_id', bi.id_item::text)), bi.created_at DESC`,
-      [userId]
+      [userId, req.user!.role]
     );
     res.json({
       data: rows.map((r: Record<string, unknown>) => toCamel(r as Record<string, unknown>)),
@@ -49,9 +49,9 @@ export async function getMyAreaOwnerships(req: Request, res: Response) {
        JOIN area a ON a.id_area = p.id_area
        JOIN cities c ON c.id_city = a.id_city
        JOIN countries co ON co.id_country = c.id_country
-       WHERE p.id_user = $1
+       WHERE (p.id_user = $1 OR $2 = 'admin')
        ORDER BY a.name`,
-      [userId]
+      [userId, req.user!.role]
     );
     res.json({
       data: rows.map((r: Record<string, unknown>) => ({
@@ -90,9 +90,9 @@ export async function getMyProviders(req: Request, res: Response) {
        LEFT JOIN area a ON a.id_area = p.id_area
        LEFT JOIN cities c ON c.id_city = a.id_city
        LEFT JOIN countries co ON co.id_country = c.id_country
-       WHERE p.id_user = $1
+       WHERE (p.id_user = $1 OR $2 = 'admin')
        ORDER BY p.name`,
-      [userId]
+      [userId, req.user!.role]
     );
     res.json({
       data: rows.map((r: Record<string, unknown>) => ({
@@ -127,8 +127,8 @@ export async function getProviderBookableItems(req: Request, res: Response) {
 
     // Security check: provider must belong to user
     const providerCheck = await pool.query(
-      'SELECT id_provider FROM provider WHERE id_provider = $1 AND id_user = $2',
-      [providerId, userId]
+      'SELECT id_provider FROM provider WHERE id_provider = $1 AND (id_user = $2 OR $3 = \'admin\')',
+      [providerId, userId, req.user!.role]
     );
 
     if (providerCheck.rows.length === 0) {
@@ -164,8 +164,8 @@ export async function getServiceDetail(req: Request, res: Response) {
        FROM bookable_items bi
        JOIN provider p ON p.id_provider = bi.id_provider
        LEFT JOIN area a ON a.id_area = bi.id_area
-       WHERE bi.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+       WHERE bi.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (itemRows.length === 0) {
@@ -251,8 +251,8 @@ export async function updateServiceDetail(req: Request, res: Response) {
     const { rows: itemRows } = await client.query(
       `SELECT bi.id_item, bi.item_type, bi.attribute FROM bookable_items bi
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE bi.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+       WHERE bi.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (itemRows.length === 0) {
@@ -494,8 +494,8 @@ export async function updateServiceStatus(req: Request, res: Response) {
     const check = await pool.query(
       `SELECT bi.id_item FROM bookable_items bi
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE bi.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+       WHERE bi.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -519,10 +519,10 @@ export async function deleteService(req: Request, res: Response) {
 
     // Check ownership
     const check = await client.query(
-      `SELECT bi.id_item FROM bookable_items bi
-         JOIN provider p ON p.id_provider = bi.id_provider
-         WHERE bi.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+      `SELECT id_item FROM bookable_items bi
+       JOIN provider p ON p.id_provider = bi.id_provider
+       WHERE bi.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -564,8 +564,8 @@ export async function addVehiclePosition(req: Request, res: Response) {
     const { rows: itemRows } = await pool.query(
       `SELECT bi.id_item, bi.item_type FROM bookable_items bi
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE bi.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+       WHERE bi.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (itemRows.length === 0) {
@@ -613,8 +613,8 @@ export async function bulkAddVehiclePositions(req: Request, res: Response) {
       `SELECT v.id_vehicle FROM vehicle v
        JOIN bookable_items bi ON bi.id_item = v.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE bi.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+       WHERE bi.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -654,8 +654,8 @@ export async function deleteVehiclePosition(req: Request, res: Response) {
        JOIN vehicle v ON v.id_vehicle = pos.id_vehicle
        JOIN bookable_items bi ON bi.id_item = v.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE pos.id_position = $1 AND p.id_user = $2`,
-      [idPosition, userId]
+       WHERE pos.id_position = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idPosition, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -674,16 +674,16 @@ export async function deleteVehiclePosition(req: Request, res: Response) {
 export async function createProvider(req: Request, res: Response) {
   try {
     const userId = req.user!.userId;
-    const { name, areaId, phone, email, fanpage, serviceType, bankName, bankAccountNumber, bankAccountName } = req.body;
+    const { name, areaId, phone, email, fanpage, serviceType, bankName, bankAccountNumber, bankAccountName, agreedTerms } = req.body;
 
     const files = req.files as Express.Multer.File[];
     const legalDocuments = files ? files.map(file => `/uploads/${file.filename}`) : [];
 
     const { rows } = await pool.query(
-      `INSERT INTO provider (name, id_area, id_user, phone, email, fanpage, service_type, legal_documents, status, bank_name, bank_account_number, bank_account_name) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11)
+      `INSERT INTO provider (name, id_area, id_user, phone, email, fanpage, service_type, legal_documents, status, bank_name, bank_account_number, bank_account_name, agreed_terms, agreed_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, $12, NOW())
        RETURNING id_provider, name, id_area, id_user, phone, email, fanpage, service_type, legal_documents, status, bank_name, bank_account_number, bank_account_name`,
-      [name, areaId, userId, phone, email, fanpage, serviceType, legalDocuments, bankName, bankAccountNumber, bankAccountName]
+      [name, areaId, userId, phone, email, fanpage, serviceType, legalDocuments, bankName, bankAccountNumber, bankAccountName, agreedTerms === 'true' || agreedTerms === true]
     );
     res.status(201).json(toCamel(rows[0] as Record<string, unknown>));
   } catch (err) {
@@ -707,8 +707,8 @@ export async function addItemMedia(req: Request, res: Response) {
     const itemCheck = await pool.query(
       `SELECT bi.id_item FROM bookable_items bi
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE bi.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+       WHERE bi.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (itemCheck.rows.length === 0) {
@@ -744,8 +744,8 @@ export async function deleteItemMedia(req: Request, res: Response) {
       `SELECT im.id_media FROM item_media im
        JOIN bookable_items bi ON bi.id_item = im.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE im.id_media = $1 AND p.id_user = $2`,
-      [idMedia, userId]
+       WHERE im.id_media = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idMedia, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -772,8 +772,8 @@ export async function addAccommodationRoom(req: Request, res: Response) {
       `SELECT a.id_item, a.total_rooms FROM accommodations a
        JOIN bookable_items bi ON bi.id_item = a.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE a.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+       WHERE a.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -823,8 +823,8 @@ export async function updateAccommodationRoom(req: Request, res: Response) {
        JOIN accommodations a ON a.id_item = r.id_item
        JOIN bookable_items bi ON bi.id_item = r.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE r.id_room = $1 AND p.id_user = $2`,
-      [idRoom, userId]
+       WHERE r.id_room = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idRoom, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -878,8 +878,8 @@ export async function uploadRoomMedia(req: Request, res: Response) {
       `SELECT r.id_room, r.media FROM accommodations_rooms r
        JOIN bookable_items bi ON bi.id_item = r.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE r.id_room = $1 AND p.id_user = $2`,
-      [idRoom, userId]
+       WHERE r.id_room = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idRoom, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -912,8 +912,8 @@ export async function deleteAccommodationRoom(req: Request, res: Response) {
       `SELECT r.id_room FROM accommodations_rooms r
        JOIN bookable_items bi ON bi.id_item = r.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE r.id_room = $1 AND p.id_user = $2`,
-      [idRoom, userId]
+       WHERE r.id_room = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idRoom, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -940,8 +940,8 @@ export async function updateVehiclePosition(req: Request, res: Response) {
        JOIN vehicle v ON v.id_vehicle = pos.id_vehicle
        JOIN bookable_items bi ON bi.id_item = v.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE pos.id_position = $1 AND p.id_user = $2`,
-      [idPosition, userId]
+       WHERE pos.id_position = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idPosition, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -972,8 +972,8 @@ export async function manageVehicle(req: Request, res: Response) {
     const check = await pool.query(
       `SELECT bi.id_item FROM bookable_items bi
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE bi.id_item = $1 AND p.id_user = $2`,
-      [idItem, userId]
+       WHERE bi.id_item = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idItem, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -1004,8 +1004,8 @@ export async function createBookableItem(req: Request, res: Response) {
     const { providerId, areaId, itemType, title, attribute, price, extraData } = req.body;
 
     const providerCheck = await client.query(
-      "SELECT id_provider, id_area, status, service_type FROM provider WHERE id_provider = $1 AND id_user = $2",
-      [providerId, userId]
+      "SELECT id_provider, id_area, status, service_type FROM provider WHERE id_provider = $1 AND (id_user = $2 OR $3 = 'admin')",
+      [providerId, userId, req.user!.role]
     );
 
     if (providerCheck.rows.length === 0) {
@@ -1202,8 +1202,8 @@ export async function addVehicleTrip(req: Request, res: Response) {
       `SELECT v.id_vehicle FROM vehicle v
        JOIN bookable_items bi ON bi.id_item = v.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE v.id_vehicle = $1 AND p.id_user = $2`,
-      [idVehicle, userId]
+       WHERE v.id_vehicle = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idVehicle, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -1234,8 +1234,8 @@ export async function deleteVehicleTrip(req: Request, res: Response) {
        JOIN vehicle v ON v.id_vehicle = vt.id_vehicle
        JOIN bookable_items bi ON bi.id_item = v.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE vt.id_trip = $1 AND p.id_user = $2`,
-      [idTrip, userId]
+       WHERE vt.id_trip = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idTrip, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -1256,8 +1256,8 @@ export async function listOrders(req: Request, res: Response) {
     const userId = req.user!.userId;
     const { status, search } = req.query;
 
-    const params: any[] = [userId];
-    let whereClause = 'WHERE p.id_user = $1';
+    const params: any[] = [userId, req.user!.role];
+    let whereClause = 'WHERE (p.id_user = $1 OR $2 = \'admin\')';
     let idx = 2;
 
     if (status && status !== 'all') {
@@ -1330,8 +1330,8 @@ export async function releaseRoom(req: Request, res: Response) {
        JOIN accommodations_rooms r ON r.id_room = d.id_room
        JOIN bookable_items bi ON bi.id_item = r.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE o.id_order = $1 AND p.id_user = $2`,
-      [idOrder, userId]
+       WHERE o.id_order = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idOrder, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -1388,8 +1388,8 @@ export async function updateOrderStatus(req: Request, res: Response) {
        ) od ON o.id_order = od.id_order
        JOIN bookable_items bi ON bi.id_item = od.id_item
        JOIN provider p ON p.id_provider = bi.id_provider
-       WHERE o.id_order = $1 AND p.id_user = $2`,
-      [idOrder, userId]
+       WHERE o.id_order = $1 AND (p.id_user = $2 OR $3 = 'admin')`,
+      [idOrder, userId, req.user!.role]
     );
 
     if (check.rows.length === 0) {
@@ -1515,6 +1515,105 @@ export async function getOrder(req: Request, res: Response) {
     });
   } catch (err) {
     console.error('Get owner order detail error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function getOwnerDashboard(req: Request, res: Response) {
+  try {
+    const userId = req.user!.userId;
+
+    // 1. Basic Stats
+    const statsQuery = await pool.query(`
+      SELECT 
+        COUNT(o.id_order) as total_orders,
+        SUM(o.owner_amount) as total_revenue,
+        (SELECT COUNT(*) FROM bookable_items bi JOIN provider p2 ON bi.id_provider = p2.id_provider WHERE p2.id_user = $1) as total_services
+      FROM "order" o
+      JOIN provider p ON o.id_provider = p.id_provider
+      WHERE p.id_user = $1 AND o.status IN ('confirmed', 'processing', 'completed')
+    `, [userId]);
+
+    const stats = statsQuery.rows[0];
+
+    // 2. Chart Data (Last 30 days)
+    const chartQuery = await pool.query(`
+      SELECT 
+        DATE(o.create_at) as date,
+        SUM(o.owner_amount) as revenue
+      FROM "order" o
+      JOIN provider p ON o.id_provider = p.id_provider
+      WHERE p.id_user = $1 
+        AND o.status IN ('confirmed', 'processing', 'completed')
+        AND o.create_at >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE(o.create_at)
+      ORDER BY DATE(o.create_at) ASC
+    `, [userId]);
+
+    // Fill missing dates
+    const chartData = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const match = chartQuery.rows.find(r => {
+        const rDate = new Date(r.date);
+        return rDate.toISOString().split('T')[0] === dateStr;
+      });
+      chartData.push({
+        name: new Date(dateStr).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
+        revenue: match ? parseFloat(match.revenue) : 0
+      });
+    }
+
+    // 3. Recent Orders
+    const recentOrders = await pool.query(`
+      SELECT o.*, p.name as provider_name
+      FROM "order" o
+      JOIN provider p ON o.id_provider = p.id_provider
+      WHERE p.id_user = $1
+      ORDER BY o.create_at DESC
+      LIMIT 10
+    `, [userId]);
+
+    res.json({
+      totalOrders: parseInt(stats.total_orders) || 0,
+      totalRevenue: parseFloat(stats.total_revenue) || 0,
+      totalServices: parseInt(stats.total_services) || 0,
+      averageRating: 4.8, // Mock for now
+      ordersChange: "+12.5%",
+      revenueChange: "+15.2%",
+      chartData,
+      recentOrders: recentOrders.rows.map(r => ({
+        ...r,
+        total_amount: parseFloat(r.total_amount),
+        owner_amount: parseFloat(r.owner_amount)
+      }))
+    });
+  } catch (err) {
+    console.error('Owner dashboard error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function getMyPayrollHistory(req: Request, res: Response) {
+  try {
+    const userId = req.user!.userId;
+    const { rows } = await pool.query(`
+      SELECT 
+        pt.*, 
+        p.name as provider_name,
+        (SELECT COUNT(*) FROM "order" o WHERE o.id_payroll = pt.id_payroll) as order_count
+      FROM payroll_transactions pt
+      JOIN provider p ON pt.id_provider = p.id_provider
+      WHERE p.id_user = $1
+      ORDER BY pt.created_at DESC
+    `, [userId]);
+
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('Get my payroll history error:', err);
     res.status(500).json({ message: 'Lỗi máy chủ' });
   }
 }

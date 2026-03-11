@@ -13,6 +13,7 @@ const redisConfig = {
 // Redis keys prefix
 export const REDIS_KEYS = {
     ORDER_STATUS: (orderId: string) => `order_status:${orderId}`,
+    OTP_VERIFY: (email: string) => `otp_verify:${email}`,
 };
 
 export const redisConnection = new Redis(redisConfig);

@@ -22,7 +22,7 @@ export const Register = () => {
     setLoading(true);
     try {
       await authApi.register({ email, password, fullName, phone });
-      navigate('/login', { replace: true, state: { message: 'Đăng ký thành công. Vui lòng xác thực email.' } });
+      navigate('/verify-otp', { state: { email } });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đăng ký thất bại');
     } finally {

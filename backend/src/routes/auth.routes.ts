@@ -53,9 +53,18 @@ router.post(
 );
 
 router.post(
-  '/verify-account',
-  [body('token').notEmpty().withMessage('Token không được để trống')],
-  authController.verifyAccount
+  '/verify-otp',
+  [
+    body('email').isEmail().normalizeEmail().withMessage('Email không hợp lệ'),
+    body('otp').isLength({ min: 6, max: 6 }).withMessage('Mã OTP phải có 6 chữ số'),
+  ],
+  authController.verifyOTP
+);
+
+router.post(
+  '/resend-otp',
+  [body('email').isEmail().normalizeEmail().withMessage('Email không hợp lệ')],
+  authController.resendOTP
 );
 
 export default router;

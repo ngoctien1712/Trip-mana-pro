@@ -74,6 +74,7 @@ export const MyProviders = () => {
   const [bankName, setBankName] = useState('');
   const [bankAccountNumber, setBankAccountNumber] = useState('');
   const [bankAccountName, setBankAccountName] = useState('');
+  const [agreedTerms, setAgreedTerms] = useState(false);
 
   // Area Selection States
   const [countryId, setCountryId] = useState('');
@@ -147,6 +148,7 @@ export const MyProviders = () => {
       setBankName('');
       setBankAccountNumber('');
       setBankAccountName('');
+      setAgreedTerms(false);
     },
     onError: (err: any) => {
       setError(err.message || 'Tạo nhà cung cấp thất bại');
@@ -375,6 +377,18 @@ export const MyProviders = () => {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-start space-x-2 p-1">
+              <input
+                id="terms"
+                type="checkbox"
+                checked={agreedTerms}
+                onChange={(e) => setAgreedTerms(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <Label htmlFor="terms" className="text-sm leading-relaxed cursor-pointer font-normal">
+                Tôi đồng ý với <Link to="/terms" className="text-primary hover:underline font-semibold">Điều khoản & Điều kiện</Link> của VietTravel.
+              </Label>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Hủy</Button>
@@ -392,10 +406,11 @@ export const MyProviders = () => {
                   formData.append('bankAccountNumber', bankAccountNumber);
                   formData.append('bankAccountName', bankAccountName);
                   if (imageFile) formData.append('images', imageFile);
+                  formData.append('agreedTerms', agreedTerms.toString());
                   createMut.mutate(formData);
                 }
               }}
-              disabled={!name || !areaId || !phone || !serviceType || createMut.isPending}
+              disabled={!name || !areaId || !phone || !serviceType || !agreedTerms || createMut.isPending}
             >
               {createMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Tạo

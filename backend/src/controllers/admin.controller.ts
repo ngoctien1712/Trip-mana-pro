@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import pool from '../config/db.js';
 import { ROLE_CODE_TO_FRONTEND, FRONTEND_TO_ROLE_CODE } from '../utils/roleMapper.js';
 import type { UserRole } from '../types/index.js';
+import { NotificationService } from '../services/notification.service.js';
 
 const SALT_ROUNDS = 10;
 
@@ -488,5 +489,346 @@ export async function approveBusinessAccount(req: Request, res: Response) {
     res.status(500).json({ message: 'Lỗi máy chủ' });
   } finally {
     if (client) client.release();
+  }
+}
+
+// ---------- Dashboard Statistics (No more mock data) ----------
+export async function getAdminDashboardStats(req: Request, res: Response) {
+  try {
+    const totalUsers = await pool.query("SELECT COUNT(*)::int as total FROM users");
+    const totalOrders = await pool.query("SELECT COUNT(*)::int as total FROM \"order\" WHERE status IN ('confirmed', 'processing', 'completed')");
+    const revenueStats = await pool.query(`
+      SELECT 
+        SUM(total_amount) as total_revenue,
+        SUM(commission_amount) as total_commission,
+        SUM(owner_amount) as total_owner_share
+      FROM "order" 
+      WHERE status IN ('confirmed', 'processing', 'completed')
+    `);
+
+    const recentBookings = await pool.query(`
+      SELECT o.id_order, o.order_code, o.total_amount, o.create_at, o.status, u.full_name as user_name, p.name as provider_name
+      FROM "order" o
+      JOIN users u ON o.id_user = u.id_user
+      LEFT JOIN provider p ON o.id_provider = p.id_provider
+      ORDER BY o.create_at DESC
+      LIMIT 10
+    `);
+
+    // Chart data: Last 30 days revenue
+    const chartData = await pool.query(`
+      WITH date_series AS (
+        SELECT generate_series(
+          CURRENT_DATE - INTERVAL '29 days',
+          CURRENT_DATE,
+          '1 day'::interval
+        )::date as day
+      )
+      SELECT 
+        ds.day,
+        COALESCE(SUM(o.total_amount), 0) as revenue,
+        COALESCE(SUM(o.commission_amount), 0) as commission
+      FROM date_series ds
+      LEFT JOIN "order" o ON ds.day = o.create_at::date AND o.status IN ('confirmed', 'processing', 'completed')
+      GROUP BY ds.day
+      ORDER BY ds.day ASC
+    `);
+
+    res.json({
+      summary: {
+        totalUsers: totalUsers.rows[0].total,
+        totalOrders: totalOrders.rows[0].total,
+        totalRevenue: Number(revenueStats.rows[0].total_revenue || 0),
+        totalCommission: Number(revenueStats.rows[0].total_commission || 0),
+        totalOwnerShare: Number(revenueStats.rows[0].total_owner_share || 0)
+      },
+      chartData: chartData.rows.map(r => ({
+        date: r.day.toISOString().split('T')[0],
+        revenue: Number(r.revenue),
+        commission: Number(r.commission)
+      })),
+      recentBookings: recentBookings.rows
+    });
+  } catch (err) {
+    console.error('Get dashboard stats error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+// ---------- Payroll Management ----------
+export async function getPayrollStats(req: Request, res: Response) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT 
+        p.id_provider, p.name, p.bank_name, p.bank_account_number, p.bank_account_name,
+        COUNT(o.id_order) as pending_orders,
+        SUM(o.owner_amount) as total_pending_amount
+      FROM provider p
+      JOIN "order" o ON p.id_provider = o.id_provider
+      WHERE o.status IN ('confirmed', 'processing', 'completed') AND o.payroll_status = 'pending'
+      GROUP BY p.id_provider, p.name
+      ORDER BY total_pending_amount DESC
+    `);
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('Get payroll stats error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function getProviderOrdersForPayroll(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(`
+      SELECT 
+        o.id_order, o.order_code, o.total_amount, o.commission_amount, o.owner_amount, o.create_at, o.order_type,
+        COALESCE(tour.title, hotel.title, bus.title, 'Dịch vụ') as service_name
+      FROM "order" o
+      LEFT JOIN order_tour_detail otd ON o.id_order = otd.id_order
+      LEFT JOIN bookable_items tour ON otd.id_item = tour.id_item
+      LEFT JOIN order_accommodations_detail oad ON o.id_order = oad.id_order
+      LEFT JOIN accommodations_rooms ar ON oad.id_room = ar.id_room
+      LEFT JOIN bookable_items hotel ON ar.id_item = hotel.id_item
+      LEFT JOIN order_pos_vehicle_detail ovd ON o.id_order = ovd.id_order
+      LEFT JOIN positions p ON ovd.id_position = p.id_position
+      LEFT JOIN vehicle v ON p.id_vehicle = v.id_vehicle
+      LEFT JOIN bookable_items bus ON v.id_item = bus.id_item
+      WHERE o.id_provider = $1 AND o.status IN ('confirmed', 'processing', 'completed') AND o.payroll_status = 'pending'
+      ORDER BY o.create_at ASC`,
+      [id]
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('Get provider orders for payroll error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function processPayroll(req: Request, res: Response) {
+  const client = await pool.connect();
+  try {
+    const { providerId, orderIds, totalAmount, commissionTotal, transactionProof } = req.body;
+
+    if (!orderIds || orderIds.length === 0) {
+      return res.status(400).json({ message: 'Không có hóa đơn nào để thanh toán' });
+    }
+
+    await client.query('BEGIN');
+
+    // 1. Get Provider info for notification and bank snapshot
+    const { rows: providerRows } = await client.query(
+      'SELECT id_provider, id_user, name, bank_name, bank_account_number, bank_account_name FROM provider WHERE id_provider = $1',
+      [providerId]
+    );
+    const provider = providerRows[0];
+
+    // 2. Create Transaction record
+    const { rows: transRows } = await client.query(`
+      INSERT INTO payroll_transactions (id_provider, amount, commission_total, transaction_proof, bank_info, status)
+      VALUES ($1, $2, $3, $4, $5, 'completed')
+      RETURNING id_payroll`,
+      [providerId, totalAmount, commissionTotal, transactionProof || null, JSON.stringify({
+        bankName: provider.bank_name,
+        accountNumber: provider.bank_account_number,
+        accountName: provider.bank_account_name
+      })]
+    );
+    const idPayroll = transRows[0].id_payroll;
+
+    // 3. Update Orders
+    await client.query(`
+      UPDATE "order" 
+      SET payroll_status = 'completed', id_payroll = $1 
+      WHERE id_order = ANY($2::uuid[])`,
+      [idPayroll, orderIds]
+    );
+
+    // 4. Send Notifications
+    await NotificationService.create({
+      userId: provider.id_user,
+      title: 'Nhận thanh toán doanh thu',
+      message: `Bạn đã được thanh toán ${totalAmount.toLocaleString('vi-VN')} VND cho ${orderIds.length} đơn hàng qua ${provider.bank_name}.`,
+      type: 'success'
+    });
+
+    // Notify all admins
+    const admins = await client.query("SELECT u.id_user FROM users u JOIN role_detail rd ON u.id_user = rd.id_user JOIN roles r ON rd.id_role = r.id_role WHERE r.code = 'ADMIN'");
+    for (const admin of admins.rows) {
+      await NotificationService.create({
+        userId: admin.id_user,
+        title: 'Thanh toán đối tác thành công',
+        message: `Đã hoàn tất thanh toán ${totalAmount.toLocaleString('vi-VN')} VND cho đối tác ${provider.name}.`,
+        type: 'success'
+      });
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, idPayroll });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Process payroll error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  } finally {
+    client.release();
+  }
+}
+
+export async function getPayrollHistory(req: Request, res: Response) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT 
+        pt.*, 
+        p.name as provider_name,
+        (SELECT COUNT(*) FROM "order" o WHERE o.id_payroll = pt.id_payroll) as order_count
+      FROM payroll_transactions pt
+      JOIN provider p ON pt.id_provider = p.id_provider
+      ORDER BY pt.created_at DESC
+    `);
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('Get payroll history error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function getPaidOrdersHistory(req: Request, res: Response) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT 
+        o.id_order, o.order_code, o.total_amount, o.commission_amount, o.owner_amount, o.create_at,
+        p.name as provider_name,
+        pt.created_at as paid_at,
+        COALESCE(tour.title, hotel.title, bus.title, 'Dịch vụ') as service_name
+      FROM "order" o
+      JOIN provider p ON o.id_provider = p.id_provider
+      JOIN payroll_transactions pt ON o.id_payroll = pt.id_payroll
+      LEFT JOIN order_tour_detail otd ON o.id_order = otd.id_order
+      LEFT JOIN bookable_items tour ON otd.id_item = tour.id_item
+      LEFT JOIN order_accommodations_detail oad ON o.id_order = oad.id_order
+      LEFT JOIN accommodations_rooms ar ON oad.id_room = ar.id_room
+      LEFT JOIN bookable_items hotel ON ar.id_item = hotel.id_item
+      LEFT JOIN order_pos_vehicle_detail ovd ON o.id_order = ovd.id_order
+      LEFT JOIN positions pos ON ovd.id_position = pos.id_position
+      LEFT JOIN vehicle v ON pos.id_vehicle = v.id_vehicle
+      LEFT JOIN bookable_items bus ON v.id_item = bus.id_item
+      WHERE o.payroll_status = 'completed'
+      ORDER BY pt.created_at DESC
+    `);
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('Get paid orders history error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+// ---------- Owner Activity Monitoring ----------
+export async function listActivityProviders(req: Request, res: Response) {
+  try {
+    const { search, startDate, endDate } = req.query;
+
+    let queryParams: any[] = [];
+    let whereConditions: string[] = [];
+
+    if (search) {
+      queryParams.push(`%${search}%`);
+      whereConditions.push(`(p.name ILIKE $${queryParams.length})`);
+    }
+
+    const start = startDate ? String(startDate) : '1970-01-01';
+    const end = endDate ? String(endDate) : '2099-12-31';
+    queryParams.push(start, end);
+    const dateRangeIdx = [queryParams.length - 1, queryParams.length];
+
+    const { rows } = await pool.query(`
+      SELECT p.id_provider, p.name, p.service_type, u.full_name as owner_name,
+             (SELECT COUNT(*) FROM bookable_items bi WHERE bi.id_provider = p.id_provider AND bi.created_at >= $${dateRangeIdx[0]} AND bi.created_at <= $${dateRangeIdx[1]}) as service_count,
+             (SELECT COUNT(*) FROM voucher v WHERE v.id_provider = p.id_provider AND v.created_at >= $${dateRangeIdx[0]} AND v.created_at <= $${dateRangeIdx[1]}) as voucher_count
+      FROM provider p
+      JOIN users u ON p.id_user = u.id_user
+      ${whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : ''}
+      ORDER BY p.name ASC
+    `, queryParams);
+
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('List activity providers error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function getProviderActivityItems(req: Request, res: Response) {
+  try {
+    const { id_provider } = req.params;
+    const { startDate, endDate } = req.query;
+
+    const start = startDate ? String(startDate) : '1970-01-01';
+    const end = endDate ? String(endDate) : '2099-12-31';
+
+    const services = await pool.query(`
+      SELECT * FROM bookable_items 
+      WHERE id_provider = $1 AND created_at >= $2 AND created_at <= $3 
+      ORDER BY created_at DESC`,
+      [id_provider, start, end]
+    );
+
+    const vouchers = await pool.query(`
+      SELECT v.*, bi.title as item_title 
+      FROM voucher v
+      LEFT JOIN bookable_items bi ON v.id_item = bi.id_item
+      WHERE v.id_provider = $1 AND v.created_at >= $2 AND v.created_at <= $3 
+      ORDER BY v.created_at DESC`,
+      [id_provider, start, end]
+    );
+
+    res.json({ services: services.rows, vouchers: vouchers.rows });
+  } catch (err) {
+    console.error('Get provider activity items error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function updateActivityItemStatus(req: Request, res: Response) {
+  try {
+    const { type, id } = req.params; // type = 'service' | 'voucher'
+    const { status } = req.body;
+
+    if (type === 'service') {
+      await pool.query('UPDATE bookable_items SET status = $1, last_updated = NOW() WHERE id_item = $2', [status, id]);
+    } else if (type === 'voucher') {
+      await pool.query('UPDATE voucher SET status = $1, updated_at = NOW() WHERE id_voucher = $2', [status, id]);
+    } else {
+      return res.status(400).json({ message: 'Loại item không hợp lệ' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update activity item status error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
+  }
+}
+
+export async function updateActivityItemDetails(req: Request, res: Response) {
+  try {
+    const { type, id } = req.params;
+    const body = req.body;
+
+    if (type === 'service') {
+      await pool.query(
+        'UPDATE bookable_items SET title = $1, price = $2, last_updated = NOW() WHERE id_item = $3',
+        [body.title, body.price, id]
+      );
+    } else if (type === 'voucher') {
+      await pool.query(
+        'UPDATE voucher SET name = $1, discount_value = $2, updated_at = NOW() WHERE id_voucher = $3',
+        [body.name, body.discount_value, id]
+      );
+    } else {
+      return res.status(400).json({ message: 'Loại item không hợp lệ' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update activity item details error:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ' });
   }
 }

@@ -35,11 +35,26 @@ router.patch(
 );
 router.delete('/users/:id', adminController.deleteUser);
 
+// Dashboard Stats
+router.get('/dashboard-stats', adminController.getAdminDashboardStats);
+
+// Provider Management
 router.get('/providers', adminController.listProviders);
 router.patch('/providers/:id/status', adminController.updateProviderStatus);
-
-// Business Registration Approval
 router.get('/pending-business', adminController.listPendingBusinessRegistrations);
 router.post('/approve-business-account/:userId', adminController.approveBusinessAccount);
+
+// Payroll Management
+router.get('/payroll/stats', adminController.getPayrollStats);
+router.get('/payroll/history', adminController.getPayrollHistory);
+router.get('/payroll/paid-orders', adminController.getPaidOrdersHistory);
+router.get('/payroll/provider/:id/orders', adminController.getProviderOrdersForPayroll);
+router.post('/payroll/process', adminController.processPayroll);
+
+// Owner Activity Monitoring
+router.get('/owner-activities/providers', adminController.listActivityProviders);
+router.get('/owner-activities/provider/:id_provider/items', adminController.getProviderActivityItems);
+router.patch('/owner-activities/items/:type/:id/status', adminController.updateActivityItemStatus);
+router.patch('/owner-activities/items/:type/:id', adminController.updateActivityItemDetails);
 
 export default router;

@@ -15,10 +15,12 @@ import {
   MapPin,
   Building2,
   Tag,
-  MessageSquare
+  MessageSquare,
+  Wallet
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { NotificationCenter } from '@/components/NotificationCenter';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +36,7 @@ const sidebarItems = [
   { icon: Map, label: 'Dịch vụ của tôi', path: '/owner/services' },
   { icon: Tag, label: 'Voucher', path: '/owner/vouchers' },
   { icon: ShoppingBag, label: 'Đơn hàng', path: '/owner/orders' },
+  { icon: Wallet, label: 'Lịch sử nhận lương', path: '/owner/payroll' },
   { icon: MessageSquare, label: 'Tin nhắn', path: '/owner/messages' },
   { icon: User, label: 'Hồ sơ', path: '/owner/profile' },
 ];
@@ -148,12 +151,7 @@ export const OwnerLayout = () => {
 
           <div className="ml-auto flex items-center gap-3">
             {/* Notifications */}
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground">
-                2
-              </span>
-            </Button>
+            <NotificationCenter />
 
             {/* User menu */}
             <DropdownMenu>

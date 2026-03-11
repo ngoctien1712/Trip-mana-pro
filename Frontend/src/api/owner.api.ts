@@ -34,12 +34,13 @@ interface OrderListParams extends ListParams {
 
 export const ownerApi = {
   // Dashboard
-  async getDashboard(): Promise<OwnerDashboardStats> {
-    await delay();
-    return mockOwnerDashboard;
+  async getDashboard(): Promise<any> {
+    return httpClient.get('/owner/dashboard');
   },
 
-  // My Services
+  async getPayrollHistory(): Promise<{ data: any[] }> {
+    return httpClient.get('/owner/payroll-history');
+  },
   async listMyServices(params: ServiceListParams = {}): Promise<PaginatedResponse<Service>> {
     await delay();
     let filtered = mockServices.filter(s => s.providerId === CURRENT_OWNER_ID);
