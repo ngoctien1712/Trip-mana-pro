@@ -1,4 +1,4 @@
-# 🚀 VietTravel Pro - Hệ Thống Quản Lý Du Lịch Toàn Diện (Full-stack Ecosystem)
+# TripMana Pro - Multi-Service Travel Booking E-commerce Platform
 
 <p align="center">
   <img src="https://img.shields.io/badge/Backend-Node.js%20Express-green?style=for-the-badge&logo=node.js" alt="Node.js">
@@ -9,25 +9,23 @@
 </p>
 
 ## Description
-**VietTravel Pro** là một nền tảng quản lý du lịch hiện đại, được thiết kế để số hóa toàn bộ quy trình trải nghiệm du lịch. Dự án không chỉ dừng lại ở một trang web đặt tour thông thường mà là một hệ thống phân quyền đa vai trò (Customer - Owner - Admin) với khả năng xử lý các tác vụ phức tạp như quản lý dịch vụ, thanh toán trực tuyến (Momo/Webhook), và đặc biệt là tích hợp **Generative AI (GPT-4)** để tự động hóa việc lập kế hoạch lịch trình.
+**TripMana Pro** là một nền tảng quản lý du lịch hiện đại, được thiết kế để số hóa toàn bộ quy trình trải nghiệm du lịch. Dự án không chỉ dừng lại ở một trang web đặt tour thông thường mà là một hệ thống phân quyền đa vai trò (Customer - Owner - Admin) với khả năng xử lý các tác vụ phức tạp như quản lý dịch vụ, thanh toán trực tuyến (Momo/Webhook), và đặc biệt là tích hợp **Generative AI (GPT-4)** để tự động hóa việc lập kế hoạch lịch trình.
 
 ---
 
 ## Demo / Screenshots
-*(Dưới đây là mô tả các màn hình chính, bạn hãy thay link ảnh thực tế vào nhé)*
 
-| ![Home Page](https://drive.google.com/file/d/1tskwz7rWU9lqTjHdENA6Yhro4gQn8Wzg/view?usp=drive_link) | 
-|:---:|:---:|
+| ![Home Page](docs/images/HomePage.png) | 
 | **Trang chủ & Tìm kiếm Tour** | 
-| ![Hotel Service](https://drive.google.com/file/d/1MdSyxh-iZHhzX9XGmSAH05AKwaOCOESB/view?usp=drive_link) | 
+| ![Hotel Service](docs/images/HotelService.png) | 
 | **Trang dịch vụ khách sạn** |
-| ![Vehicel Service](https://drive.google.com/file/d/1MdSyxh-iZHhzX9XGmSAH05AKwaOCOESB/view?usp=drive_link) | 
+| ![Vehicel Service](docs/images/VehicelService.png) | 
 | **Trang dịch vụ xe khách** | 
-| ![Tour Service](https://drive.google.com/file/d/1-uR7lNYYP831bXXbx8YLWRvOophWr7oR/view?usp=drive_link) | 
+| ![Tour Service](docs/images/TourService.png) | 
 | **Trang dịch vụ tour** |
-| ![Owner Dashboard](https://drive.google.com/file/d/1eteRU2D1wYgvUfzQ-08mcMquONNOwWus/view?usp=drive_link) | 
+| ![Owner Dashboard](docs/images/OwnerDashboard.png) | 
 | **Bảng điều khiển cho Chủ dịch vụ** |
-| ![Admin Dashboard](https://drive.google.com/file/d/1AXkIAIzayNj1QuZOigZmB1hkgKFf8PeK/view?usp=drive_link) | 
+| ![Admin Dashboard](docs/images/AdminDashboard.png) | 
 | **Bảng điều khiển cho Admin** |
 
 ---
@@ -167,13 +165,23 @@ Một số API tiêu biểu (Đã được test qua Postman):
 - [ ] **Dockerize:** Đóng gói toàn bộ hệ thống bằng Docker & Kubernetes.
 - [ ] **Unit Testing:** Triển khai bộ test toàn diện với Vitest/Supertest.
 
+## 📜 License
+Dự án này được phân phối dưới giấy phép [MIT](https://choosealicense.com/licenses/mit/). Xem file [LICENSE](./LICENSE) để xem toàn bộ nội dung giấy phép.
+
 ---
 
-## Author
-**[Tên Của Bạn]** - Backend Intern Developer
+## 👨‍💻 Authors
+
+**1. [Tên Của Bạn]** - Backend Intern Developer (Core)
 - **Email:** [Email Của Bạn]
 - **LinkedIn:** [Link LinkedIn Của Bạn]
 - **Portfolio:** [Link Portfolio Của Bạn]
-- **Github:** [ngoctien1712](https://github.com/ngoctien1712)
+- **Github:** [Link Github Của Bạn]
+
+**2. [Tên Thành Viên Thứ 2]** - Frontend/Backend Developer
+- **Email:** [Email Thành Viên 2]
+- **LinkedIn:** [Link LinkedIn Thành Viên 2]
+- **Portfolio:** [Link Portfolio Thành Viên 2]
+- **Github:** [Link Github Thành Viên 2]
 
 ---
