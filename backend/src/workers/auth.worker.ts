@@ -1,6 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import { redisConnection } from '../config/redis.js';
-import { AUTH_QUEUE_NAME } from '../queues/auth.queue.ts';
+import { AUTH_QUEUE_NAME } from '../queues/auth.queue.js';
 import pool from '../config/db.js';
 
 interface AuthJobData {
