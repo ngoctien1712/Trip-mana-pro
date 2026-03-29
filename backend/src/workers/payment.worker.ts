@@ -14,21 +14,13 @@ export const startPaymentWorker = () => {
         async (job: Job<PaymentJobData>) => {
             const { orderId } = job.data;
 
-            // 1. Fast Check via Redis (Optimization for High Throughput)
-            const redisStatus = await redisConnection.get(REDIS_KEYS.ORDER_STATUS(orderId));
-            if (redisStatus === 'paid') {
-                return;
-            }
-
-
-
             const client = await pool.connect();
             try {
                 await client.query('BEGIN');
 
-                // 1. Check if the order is still pending
+                // 1. Check if the order is still pending and if it has expired
                 const { rows } = await client.query(
-                    'SELECT status, id_voucher, order_code FROM "order" WHERE id_order = $1',
+                    'SELECT status, id_voucher, order_code, payment_expires_at FROM "order" WHERE id_order = $1',
                     [orderId]
                 );
 
@@ -38,31 +30,40 @@ export const startPaymentWorker = () => {
 
                 const order = rows[0];
 
-                // Only rollback if status is still 'pending'
-                // If the user already paid, status will be 'confirmed' or 'paid'
+                // Only fail if status is still 'pending' and current time is past expiration
                 if (order.status === 'pending') {
+                    const now = new Date();
+                    const expiresAt = new Date(order.payment_expires_at);
 
-                    // 2. Rollback Voucher quantity if exists
-                    if (order.id_voucher) {
-                        await client.query(`
-                            UPDATE voucher 
-                            SET quantity = CASE WHEN quantity IS NOT NULL THEN quantity + 1 ELSE quantity END,
-                                quantity_pay = COALESCE(quantity_pay, 0) - 1
-                            WHERE id_voucher = $1
-                        `, [order.id_voucher]);
+                    if (now >= expiresAt) {
+                        // 2. Rollback Voucher quantity if exists
+                        if (order.id_voucher) {
+                            await client.query(`
+                                UPDATE voucher 
+                                SET quantity = CASE WHEN quantity IS NOT NULL THEN quantity + 1 ELSE quantity END,
+                                    quantity_pay = COALESCE(quantity_pay, 0) - 1
+                                WHERE id_voucher = $1
+                            `, [order.id_voucher]);
+                        }
+
+                        // 3. Mark the order as 'failed' (timeout)
+                        await client.query(
+                            'UPDATE "order" SET status = $1 WHERE id_order = $2',
+                            ['failed', orderId]
+                        );
+
+                        // 4. Mark associated payments as 'failed'
+                        await client.query(
+                            'UPDATE payments SET status = $1 WHERE id_order = $2 AND status = $3',
+                            ['failed', orderId, 'pending']
+                        );
+                        console.log(`[Worker] Order ${orderId} marked as failed due to payment timeout.`);
+                    } else {
+                        // This job might have been triggered too early or manually.
+                        // We could re-queue if needed, but since we add with delay, 
+                        // this only happens if system clock is inconsistent or manual job added.
+                        console.log(`[Worker] Order ${orderId} check skipped - not yet expired.`);
                     }
-
-                    // 3. Mark the order as 'failed' (timeout)
-                    await client.query(
-                        'UPDATE "order" SET status = $1 WHERE id_order = $2',
-                        ['failed', orderId]
-                    );
-
-                    // 4. Mark associated payments as 'failed'
-                    await client.query(
-                        'UPDATE payments SET status = $1 WHERE id_order = $2 AND status = $3',
-                        ['failed', orderId, 'pending']
-                    );
                 }
                 await client.query('COMMIT');
             } catch (error) {

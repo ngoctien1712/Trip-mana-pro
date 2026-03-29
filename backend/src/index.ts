@@ -14,18 +14,15 @@ import notificationRoutes from './routes/notification.routes.js';
 import { startOrderMonitor } from './services/order-monitor.service.js';
 import { startPaymentWorker } from './workers/payment.worker.js';
 import { startEmailWorker } from './workers/email.worker.js';
-import { cleanupAllTokens } from './utils/token.js';
+import { startAuthWorker } from './workers/auth.worker.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Revoke all tokens on startup (Disabled for better UX/session persistence)
-// cleanupAllTokens();
-
-// Start the periodic order monitor (SQL Polling) - (Keep as backup if needed, but the worker is preferred)
-// startOrderMonitor();
+// Start workers
 startPaymentWorker();
 startEmailWorker();
+startAuthWorker();
 
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:8080', credentials: true }));
 app.use(express.json());

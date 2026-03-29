@@ -763,10 +763,13 @@ export const createBooking = async (req: Request, res: Response) => {
     const commissionAmount = totalAmount * commissionRate;
     const ownerAmount = totalAmount - commissionAmount;
 
+    // calculate expiration
+    const paymentExpiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
+
     const orderInsert = await query(
-      `INSERT INTO "order" (status, order_code, total_amount, currency, order_type, id_user, payment_method, id_voucher, discount_amount, subtotal_amount, id_provider, commission_amount, owner_amount) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id_order`,
-      ['pending', orderCode, totalAmount, 'VND', item_type, userId, payment_method, idVoucher, discountAmount, subtotal, itemProviderId, commissionAmount, ownerAmount]
+      `INSERT INTO "order" (status, order_code, total_amount, currency, order_type, id_user, payment_method, id_voucher, discount_amount, subtotal_amount, id_provider, commission_amount, owner_amount, payment_expires_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id_order`,
+      ['pending', orderCode, totalAmount, 'VND', item_type, userId, payment_method, idVoucher, discountAmount, subtotal, itemProviderId, commissionAmount, ownerAmount, paymentExpiresAt]
     );
     const idOrder = orderInsert.rows[0].id_order;
 
@@ -838,9 +841,6 @@ export const createBooking = async (req: Request, res: Response) => {
 
     // 7. Add job to Payment Queue for monitoring (3 minutes timeout)
     await addPaymentCheckJob(idOrder, 3 * 60 * 1000);
-
-    // 8. Cache status in Redis for fast access (TTL slightly longer than job delay)
-    await redisConnection.set(REDIS_KEYS.ORDER_STATUS(idOrder), 'pending', 'EX', 5 * 60);
 
     // 9. Send success response only after all operations succeed
     res.json({
@@ -1113,8 +1113,7 @@ export const handleMomoIPN = async (req: Request, res: Response) => {
         await query(`UPDATE "order" SET status = 'confirmed', payment_transaction_id = $1 WHERE id_order = $2`, [transId, idOrder]);
         await query(`UPDATE payments SET status = 'paid', paid_at = NOW() WHERE id_order = $1`, [idOrder]);
 
-        // optimization: update Redis status and remove the monitoring job immediately
-        await redisConnection.set(REDIS_KEYS.ORDER_STATUS(idOrder), 'paid', 'EX', 60);
+        // remove the monitoring job immediately
         await removePaymentJob(idOrder);
       }
     } else {
@@ -1199,8 +1198,7 @@ export const handleProjectWebhook = async (req: Request, res: Response) => {
       [order.id_order]
     );
 
-    // optimization: update Redis status and remove the monitoring job immediately
-    await redisConnection.set(REDIS_KEYS.ORDER_STATUS(order.id_order), 'paid', 'EX', 60);
+    // remove the monitoring job immediately
     await removePaymentJob(order.id_order);
     res.json({ success: true, message: 'Xác nhận đơn hàng thành công' });
   } catch (err) {

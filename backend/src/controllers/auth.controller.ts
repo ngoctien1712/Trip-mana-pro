@@ -15,6 +15,7 @@ import {
 import { OAuth2Client } from 'google-auth-library';
 import redisConnection, { REDIS_KEYS } from '../config/redis.js';
 import { addEmailJob } from '../queues/email.queue.js';
+import { addOTPCheckJob, removeOTPJob } from '../queues/auth.queue.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -54,20 +55,21 @@ export async function register(req: Request, res: Response) {
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const otp = generateOTP();
-
-    // Store OTP in Redis with 5 minutes TTL
-    await redisConnection.set(REDIS_KEYS.OTP_VERIFY(email), otp, 'EX', 300);
+    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
     const { rows: userRows } = await pool.query(
-      `INSERT INTO users (email, phone, full_name, password_hash, status, auth_provider)
-       VALUES ($1, $2, $3, $4, 'pending', 'local')
+      `INSERT INTO users (email, phone, full_name, password_hash, status, auth_provider, otp_code, otp_expires_at)
+       VALUES ($1, $2, $3, $4, 'pending', 'local', $5, $6)
        RETURNING id_user, email, phone, full_name, status, created_at`,
-      [email, phone || null, fullName || null, hash]
+      [email, phone || null, fullName || null, hash, otp, otpExpiresAt]
     );
     const user = userRows[0];
 
     // Send OTP via BullMQ
     await addEmailJob('verification', { email: user.email, otp });
+
+    // Monitor OTP timeout via BullMQ
+    await addOTPCheckJob(user.email, 5 * 60 * 1000);
 
     // Force CUSTOMER role
     const roleCode = 'CUSTOMER';
@@ -428,29 +430,45 @@ export async function verifyOTP(req: Request, res: Response) {
       return res.status(400).json({ message: 'Thiếu email hoặc mã OTP' });
     }
 
-    const storedOTP = await redisConnection.get(REDIS_KEYS.OTP_VERIFY(email));
+    // 1. Get user from DB
+    const { rows } = await pool.query(
+      'SELECT id_user, otp_code, otp_expires_at FROM users WHERE email = $1 AND status = \'pending\'',
+      [email]
+    );
 
-    if (!storedOTP) {
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Tài khoản không tìm thấy hoặc đã được kích hoạt' });
+    }
+
+    const user = rows[0];
+
+    // 2. Check if OTP exists and is correct
+    if (!user.otp_code) {
       return res.status(400).json({ message: 'Mã OTP đã hết hạn hoặc không tồn tại' });
     }
 
-    if (storedOTP !== otp) {
+    if (user.otp_code !== otp) {
       return res.status(400).json({ message: 'Mã OTP không chính xác' });
+    }
+
+    // 3. Check expiration
+    if (new Date() > new Date(user.otp_expires_at)) {
+      return res.status(400).json({ message: 'Mã OTP đã hết hạn. Vui lòng lấy mã mới.' });
     }
 
     // Activate user
     const { rowCount } = await pool.query(
-      `UPDATE users SET status = 'active', email_verified_at = NOW(), updated_at = NOW()
-       WHERE email = $1 AND status = 'pending'`,
+      `UPDATE users SET status = 'active', email_verified_at = NOW(), otp_code = NULL, otp_expires_at = NULL, updated_at = NOW()
+       WHERE email = $1`,
       [email]
     );
 
     if (rowCount === 0) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại hoặc đã được kích hoạt' });
+      return res.status(404).json({ message: 'Lỗi khi kích hoạt tài khoản' });
     }
 
-    // Delete OTP from Redis
-    await redisConnection.del(REDIS_KEYS.OTP_VERIFY(email));
+    // Remove BullMQ job
+    await removeOTPJob(email);
 
     res.json({ message: 'Xác thực tài khoản thành công. Bây giờ bạn có thể đăng nhập.' });
   } catch (err) {
@@ -467,23 +485,30 @@ export async function resendOTP(req: Request, res: Response) {
       return res.status(400).json({ message: 'Thiếu email' });
     }
 
-    // Check if user exists and is pending
+    // Check if user exists and is pending/failed
     const { rows } = await pool.query(
-      'SELECT id_user FROM users WHERE email = $1 AND status = $2',
-      [email, 'pending']
+      'SELECT id_user FROM users WHERE email = $1 AND status IN ($2, $3)',
+      [email, 'pending', 'failed']
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: 'Không tìm thấy tài khoản chờ xác thực với email này' });
+      return res.status(404).json({ message: 'Không tìm thấy tài khoản với email này (hoặc đã kích hoạt)' });
     }
 
     const otp = generateOTP();
+    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    // Store OTP in Redis with 5 minutes TTL
-    await redisConnection.set(REDIS_KEYS.OTP_VERIFY(email), otp, 'EX', 300);
+    // Store OTP in DB (reset status to pending if it was failed)
+    await pool.query(
+      'UPDATE users SET status = \'pending\', otp_code = $1, otp_expires_at = $2 WHERE email = $3',
+      [otp, otpExpiresAt, email]
+    );
 
     // Send OTP via BullMQ
     await addEmailJob('verification', { email, otp });
+
+    // Monitor OTP timeout via BullMQ
+    await addOTPCheckJob(email, 5 * 60 * 1000);
 
     res.json({ message: 'Mã OTP mới đã được gửi đến email của bạn' });
   } catch (err) {
