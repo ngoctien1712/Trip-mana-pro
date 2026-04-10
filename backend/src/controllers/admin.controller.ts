@@ -5,6 +5,7 @@ import { ROLE_CODE_TO_FRONTEND, FRONTEND_TO_ROLE_CODE } from '../utils/roleMappe
 import type { UserRole } from '../types/index.js';
 import { NotificationService } from '../services/notification.service.js';
 import { addEmailJob } from '../queues/email.queue.js';
+import redisConnection from '../config/redis.js';
 
 const SALT_ROUNDS = 10;
 
@@ -21,9 +22,24 @@ async function getUserRole(userId: string): Promise<UserRole> {
   return (ROLE_CODE_TO_FRONTEND[code] ?? 'customer') as UserRole;
 }
 
+async function clearUserListCache() {
+  const keys = await redisConnection.keys('admin:users:list:*');
+  if (keys.length > 0) {
+    await redisConnection.del(...keys);
+  }
+}
+
 export async function listUsers(req: Request, res: Response) {
   try {
     const { page = 1, pageSize = 10, search, role, status } = req.query;
+
+    // Redis cache key
+    const cacheKey = `admin:users:list:${JSON.stringify(req.query)}`;
+    const cachedData = await redisConnection.get(cacheKey);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+
     const offset = (Number(page) - 1) * Number(pageSize);
     const limit = Math.min(Number(pageSize) || 10, 50);
 
@@ -92,13 +108,18 @@ export async function listUsers(req: Request, res: Response) {
       createdAt: row.created_at,
     }));
 
-    res.json({
+    const responseData = {
       data,
       total,
       page: Number(page),
       pageSize: limit,
       totalPages: Math.ceil(total / limit),
-    });
+    };
+
+    // Cache for 5 minutes
+    await redisConnection.setex(cacheKey, 300, JSON.stringify(responseData));
+
+    res.json(responseData);
   } catch (err) {
     console.error('List users error:', err);
     res.status(500).json({ message: 'Lỗi máy chủ' });
@@ -160,6 +181,8 @@ export async function updateUser(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { fullName, phone, status, role: newRole, profile: profileData } = req.body;
+
+    await clearUserListCache();
 
     await pool.query(
       'UPDATE users SET full_name = COALESCE($1, full_name), phone = COALESCE($2, phone), status = COALESCE($3, status), updated_at = NOW() WHERE id_user = $4',
@@ -227,6 +250,8 @@ export async function createUser(req: Request, res: Response) {
   try {
     const { email, password, fullName, phone, role, status } = req.body;
 
+    await clearUserListCache();
+
     const existing = await pool.query('SELECT id_user FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ message: 'Email đã tồn tại' });
@@ -279,6 +304,9 @@ export async function deleteUser(req: Request, res: Response) {
     if (req.user!.userId === id) {
       return res.status(400).json({ message: 'Không thể xóa chính mình' });
     }
+
+    await clearUserListCache();
+
     const { rowCount } = await pool.query('DELETE FROM users WHERE id_user = $1', [id]);
     if (rowCount === 0) return res.status(404).json({ message: 'Không tìm thấy người dùng' });
     res.json({ message: 'Đã xóa người dùng' });
@@ -902,8 +930,8 @@ export async function approveRefund(req: Request, res: Response) {
     }
 
     // 3. Process the Actual/Mock Refund
-    const isMock = rr.payment_method?.toLowerCase().includes('demo') || rr.payment_method?.toLowerCase().includes('momo'); 
-    
+    const isMock = rr.payment_method?.toLowerCase().includes('demo') || rr.payment_method?.toLowerCase().includes('momo');
+
     if (isMock) {
       console.log(`[REFUND-DEMO] Simulating refund for ${rr.order_code} via ${rr.payment_method}: ${rr.amount} VND`);
     } else {
@@ -919,47 +947,47 @@ export async function approveRefund(req: Request, res: Response) {
 
     // Update order status correctly
     await client.query(`UPDATE "order" SET status = 'refunded' WHERE id_order = $1`, [rr.id_order]);
-    
+
     // Update payment and record refund
     const { rows: payRows } = await client.query(
-        'SELECT id_pay FROM payments WHERE id_order = $1 ORDER BY paid_at DESC LIMIT 1',
-        [rr.id_order]
+      'SELECT id_pay FROM payments WHERE id_order = $1 ORDER BY paid_at DESC LIMIT 1',
+      [rr.id_order]
     );
     const idPay = payRows[0]?.id_pay;
 
     if (idPay) {
-        await client.query("UPDATE payments SET status = 'refunded' WHERE id_pay = $1", [idPay]);
-        await client.query(
-            `INSERT INTO refunds (amount, status, reason_code, id_pay, id_refund_request)
+      await client.query("UPDATE payments SET status = 'refunded' WHERE id_pay = $1", [idPay]);
+      await client.query(
+        `INSERT INTO refunds (amount, status, reason_code, id_pay, id_refund_request)
              VALUES ($1, 'completed', $2, $3, $4)`,
-            [rr.amount, rr.reason || 'Sự cố từ phía khách hàng', idPay, id]
-        );
+        [rr.amount, rr.reason || 'Sự cố từ phía khách hàng', idPay, id]
+      );
     }
 
     if (rr.id_voucher) {
-        await client.query(
-            `UPDATE voucher SET quantity = quantity + 1, quantity_pay = GREATEST(0, quantity_pay - 1) WHERE id_voucher = $1`,
-            [rr.id_voucher]
-        );
+      await client.query(
+        `UPDATE voucher SET quantity = quantity + 1, quantity_pay = GREATEST(0, quantity_pay - 1) WHERE id_voucher = $1`,
+        [rr.id_voucher]
+      );
     }
 
     // 5. Send Email Notifications
     const { EmailService } = await import('../services/email.service.js');
     await EmailService.notifyRefundDecision({
-        customerEmail: rr.customer_email,
-        orderCode: rr.order_code,
-        isApproved: true,
-        adminNote: adminNote,
-        amount: Number(rr.amount)
+      customerEmail: rr.customer_email,
+      orderCode: rr.order_code,
+      isApproved: true,
+      adminNote: adminNote,
+      amount: Number(rr.amount)
     });
     console.log(`[Email] Phê duyệt hoàn tiền: Đã gửi mail tới ${rr.customer_email}`);
 
     // In-app notification for customer
     await NotificationService.create({
-        userId: rr.id_user,
-        title: 'Yêu cầu hoàn tiền đã hội duyệt',
-        message: `Yêu cầu hoàn tiền cho đơn hàng #${rr.order_code} đã được phê duyệt. Số tiền ${Number(rr.amount).toLocaleString('vi-VN')}đ sẽ được chuyển về tài khoản của bạn.`,
-        type: 'success'
+      userId: rr.id_user,
+      title: 'Yêu cầu hoàn tiền đã hội duyệt',
+      message: `Yêu cầu hoàn tiền cho đơn hàng #${rr.order_code} đã được phê duyệt. Số tiền ${Number(rr.amount).toLocaleString('vi-VN')}đ sẽ được chuyển về tài khoản của bạn.`,
+      type: 'success'
     });
 
     await client.query('COMMIT');
@@ -1010,20 +1038,20 @@ export async function rejectRefund(req: Request, res: Response) {
     // 3. Send notification email
     const { EmailService } = await import('../services/email.service.js');
     await EmailService.notifyRefundDecision({
-        customerEmail: rr.customer_email,
-        orderCode: rr.order_code,
-        isApproved: false,
-        adminNote: adminNote,
-        amount: Number(rr.amount)
+      customerEmail: rr.customer_email,
+      orderCode: rr.order_code,
+      isApproved: false,
+      adminNote: adminNote,
+      amount: Number(rr.amount)
     });
     console.log(`[Email] Từ chối hoàn tiền: Đã gửi mail tới ${rr.customer_email}`);
 
     // In-app notification for customer
     await NotificationService.create({
-        userId: rr.id_user,
-        title: 'Yêu cầu hoàn tiền bị từ chối',
-        message: `Yêu cầu hoàn tiền cho đơn hàng #${rr.order_code} đã bị từ chối. Lý do: ${adminNote}`,
-        type: 'error'
+      userId: rr.id_user,
+      title: 'Yêu cầu hoàn tiền bị từ chối',
+      message: `Yêu cầu hoàn tiền cho đơn hàng #${rr.order_code} đã bị từ chối. Lý do: ${adminNote}`,
+      type: 'error'
     });
 
     res.json({ success: true, message: 'Đã từ chối yêu cầu hoàn tiền' });
